@@ -1,7 +1,7 @@
 # Musicana project
-A radio-like audio player that jumps between tracks in a semi-random way.
+A radio-like audio player that jumps between tracks in a semi-random way (using a random step algorithm).
 Find the next track is an open question in recommender systems domain. 
-The final idea of the this project is to have many recommendations agents using different algorithms, and let each user chooses the agents that satisfies his needs.
+The final idea of the this project is to have many recommendations agents using different algorithms, and let each user chooses the agent that satisfies his needs.
 
 # How to use it?
 Root folder with subfolders getallMp3
