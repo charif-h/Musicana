@@ -42,6 +42,10 @@ class Player():
         pygame.mixer.music.unpause()
         self.playing = True
 
+    def stop(self):
+        pygame.mixer.music.stop()
+        self.playing = None
+
     def isTrackEnded(self):
         return not pygame.mixer.music.get_busy()
 

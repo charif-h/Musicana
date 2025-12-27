@@ -1,6 +1,8 @@
 from tkinter import *  # for UI
 from mutagen import File
 from PIL import ImageTk, Image
+from dotenv import load_dotenv
+import os
 
 import ImageColorExtract
 import Nexter_RandomWalk
@@ -24,7 +26,9 @@ class Application(Frame):
         #self.root.minsize(300,300) # set size as 300 x 300 wide, Change this accordingly
         self.commentateur = Comentateur.Commentator()
 
-        self.tracks = FileSystem.getAllMp3('D:/Music/')
+        load_dotenv()
+        music_path = os.getenv("MUSICANA_MUSIC_PATH", "C:/Users/chari/Documents/D/Music/")
+        self.tracks = FileSystem.getAllMp3(music_path)
         self.player = Player.Player()
         self.commentateur.say("Hello, Any filter to start from? : ")
         self.titles = self.getTracksKeys(self.tracks)
@@ -32,9 +36,11 @@ class Application(Frame):
         self.banned = queue.Queue(maxsize=20)
         self.bgColor = "white"
         self.fgColor = "black"
+        self.user_pause = False
 
         self.interface()
         self.findTrack()
+        self.root.mainloop()
 
     def interface(self):
         # filter
@@ -102,7 +108,6 @@ class Application(Frame):
                     txt = self.tracks[i - 1]
                 b = Label(frm_table, text=txt)
                 b.grid(row=i, column=j)'''
-        self.root.mainloop()
 
     def getTracksKeys(self, tracks):
         keys = []
@@ -131,12 +136,15 @@ class Application(Frame):
             self.displayTrackInfo(info)
             self.scl_time.configure(to=self.player.mp3Length)
             self.lbl_trackLength.configure(text= intToTimeText(int(self.player.mp3Length)))
+            self.user_pause = False
         elif(self.player.playing):
             self.btn_play["text"] = "play"
             self.player.pause()
+            self.user_pause = True
         else:
             self.btn_play["text"] = "stop"
             self.player.resume()
+            self.user_pause = False
         self.update_clock()
 
     def displayTrackInfo(self, info):
@@ -185,7 +193,8 @@ class Application(Frame):
                 img.write(artwork)
             img.close()
             self.original = Image.open("image.jpg")
-            self.fitted = self.original.resize((300, 300),Image.ANTIALIAS)
+            resample = getattr(Image, "Resampling", Image).LANCZOS  # PIL>=10 removed ANTIALIAS
+            self.fitted = self.original.resize((300, 300), resample)
             self.imge = ImageTk.PhotoImage(self.fitted)  # PhotoImage(file="image.jpg")
             #image1 = PhotoImage(file="image.jpg")
             panel = Label(self.frm_image, image = self.imge, width=300, height=300)
@@ -220,6 +229,8 @@ class Application(Frame):
 
 
     def update_clock(self):
+        if self.user_pause:
+            return
         if(self.player.playing):
             #val = int(self.scl_time.get()) + 1
             #self.scl_time.set(value=val)

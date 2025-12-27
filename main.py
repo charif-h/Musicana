@@ -92,7 +92,7 @@ Nadia = Comentateur.Commentator()
 app = App()
 
 noHistory = queue.Queue(maxsize=20)
-path = 'D:/Music/'
+path = 'C:/Music'
 tracks = FileSystem.getAllMp3(path)
 pygame.mixer.init()
 
