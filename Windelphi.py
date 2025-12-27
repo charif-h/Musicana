@@ -23,7 +23,9 @@ class Application(Frame):
 
     def __init__(self):
         self.root = Tk() # creates an Empty window
-        #self.root.minsize(300,300) # set size as 300 x 300 wide, Change this accordingly
+        self.root.title("Musicana - Smart Music Player")
+        self.root.minsize(800, 600)
+        self.root.configure(bg='#f0f0f0')
         self.commentateur = Comentateur.Commentator()
 
         load_dotenv()
@@ -34,8 +36,8 @@ class Application(Frame):
         self.titles = self.getTracksKeys(self.tracks)
         self.track = random.choice(list(self.tracks))
         self.banned = queue.Queue(maxsize=20)
-        self.bgColor = "white"
-        self.fgColor = "black"
+        self.bgColor = "#f0f0f0"
+        self.fgColor = "#333333"
         self.user_pause = False
 
         self.interface()
@@ -43,55 +45,86 @@ class Application(Frame):
         self.root.mainloop()
 
     def interface(self):
-        # filter
-        frm_search_bar = Frame(self.root)
-        frm_search_bar.pack(side='top', fill='x', padx=2, pady=1, expand=True)
-        Lbl_find = Label(frm_search_bar, text="find", padx=2, pady=5)
-        Lbl_find.pack(side=LEFT)
-        self.inp_find = Entry(frm_search_bar, bd=2, width=50)
-        self.inp_find.pack(side=LEFT, fill='x')
+        # Search bar section
+        frm_search_bar = Frame(self.root, bg='#f0f0f0')
+        frm_search_bar.pack(side='top', fill='x', padx=20, pady=15)
+        
+        Lbl_find = Label(frm_search_bar, text="Search:", font=("Arial", 12), bg='#f0f0f0', fg='#333333')
+        Lbl_find.pack(side=LEFT, padx=(0, 10))
+        
+        self.inp_find = Entry(frm_search_bar, bd=2, width=50, font=("Arial", 11), relief='solid')
+        self.inp_find.pack(side=LEFT, fill='x', expand=True, ipady=5)
         self.inp_find.bind('<Return>', self.findTrackKey)
-        #self.inp_find.set("childhood")
-        btn_find = Button(frm_search_bar, text='filter', command=self.findTrack)
-        btn_find.pack(side=RIGHT)
+        
+        btn_find = Button(frm_search_bar, text='Filter', command=self.findTrack, 
+                         font=("Arial", 10, "bold"), bg='#4CAF50', fg='white', 
+                         relief='flat', padx=20, pady=5, cursor='hand2')
+        btn_find.pack(side=RIGHT, padx=(10, 0))
 
-        # playser
-        frm_player = Frame(self.root)
-        frm_player.pack(side='top', fill='x', padx=2, pady=1, expand=True)
-        #btn_back = Button(frm_player, text='b')
-        #btn_back.pack(side='left')
+        # Player controls section
+        frm_player = Frame(self.root, bg='#f0f0f0')
+        frm_player.pack(side='top', fill='x', padx=20, pady=10)
+        
+        # Control buttons frame
+        frm_buttons = Frame(frm_player, bg='#f0f0f0')
+        frm_buttons.pack(side='top', pady=(0, 10))
+        
+        self.btn_play = Button(frm_buttons, text='▶ Play', command=self.play,
+                              font=("Arial", 10, "bold"), bg='#2196F3', fg='white',
+                              relief='flat', padx=20, pady=8, cursor='hand2', width=10)
+        self.btn_play.pack(side='left', padx=5)
 
-        self.btn_play = Button(frm_player, text='play', command=self.play)
-        self.btn_play.pack(side='left')
+        btn_next = Button(frm_buttons, text='⏭ Next', command=self.next,
+                         font=("Arial", 10, "bold"), bg='#2196F3', fg='white',
+                         relief='flat', padx=20, pady=8, cursor='hand2', width=10)
+        btn_next.pack(side='left', padx=5)
 
-        btn_next = Button(frm_player, text='next', command=self.next)
-        btn_next.pack(side='left')
-
-        btn_random = Button(frm_player, text='rndm', command=self.randomTrack)
-        btn_random.pack(side='left')
-
-        self.scl_time = Scale(frm_player, from_=0, to=342, orient=HORIZONTAL)
+        btn_random = Button(frm_buttons, text='🎲 Random', command=self.randomTrack,
+                           font=("Arial", 10, "bold"), bg='#2196F3', fg='white',
+                           relief='flat', padx=20, pady=8, cursor='hand2', width=10)
+        btn_random.pack(side='left', padx=5)
+        
+        # Time slider section
+        frm_time = Frame(frm_player, bg='#f0f0f0')
+        frm_time.pack(side='top', fill='x', pady=(0, 10))
+        
+        Label(frm_time, text="Time:", font=("Arial", 9), bg='#f0f0f0', fg='#333333').pack(side=LEFT, padx=(0, 10))
+        
+        self.scl_time = Scale(frm_time, from_=0, to=342, orient=HORIZONTAL, 
+                             showvalue=0, relief='flat', bg='#e0e0e0', 
+                             troughcolor='#2196F3', highlightthickness=0)
         self.scl_time.bind("<ButtonRelease-1>", self.setPos)
-        self.scl_time.pack(side=LEFT)
-        self.lbl_trackLength = Label(frm_player, text="00", padx=1, pady=5)
-        self.lbl_trackLength.pack(side=LEFT)
+        self.scl_time.pack(side=LEFT, fill='x', expand=True, padx=5)
+        
+        self.lbl_trackLength = Label(frm_time, text="00:00", font=("Arial", 9, "bold"), 
+                                     bg='#f0f0f0', fg='#333333', width=6)
+        self.lbl_trackLength.pack(side=LEFT, padx=(10, 0))
+        
+        # Volume control section
+        frm_volume = Frame(frm_player, bg='#f0f0f0')
+        frm_volume.pack(side='top', fill='x')
+        
+        Label(frm_volume, text="Volume:", font=("Arial", 9), bg='#f0f0f0', fg='#333333').pack(side=LEFT, padx=(0, 10))
+        
+        self.scl_son = Scale(frm_volume, from_=0, to=100, orient=HORIZONTAL, 
+                           command=self.setVolume, showvalue=1, relief='flat',
+                           bg='#e0e0e0', troughcolor='#4CAF50', highlightthickness=0)
+        self.scl_son.pack(side=LEFT, fill='x', expand=True, padx=5)
 
-        self.scl_son = Scale(frm_player, from_=0, to=100, orient=HORIZONTAL, command=self.setVolume)
-        self.scl_son.pack(side=RIGHT)
+        # Track info section
+        self.frm_track = Frame(self.root, bg='#f0f0f0')
+        self.frm_track.pack(side=TOP, fill='both', expand=True, padx=20, pady=10)
 
-        # Track
+        self.frm_image = Frame(self.frm_track, width=350, height=350, bg='#ffffff', relief='solid', bd=1)
+        self.frm_image.pack(side=LEFT, padx=(0, 20))
 
-        self.frm_track = Frame(self.root)
-        self.frm_track.pack(side=TOP, fill='x')
-
-        self.frm_image = Frame(self.frm_track, width=300, height=300)
-        self.frm_image.pack(side=LEFT)
-
-        self.frm_track_info = Frame(self.frm_track)
-        self.frm_track_info.pack(side=RIGHT, fill='x')
+        self.frm_track_info = Frame(self.frm_track, bg='#f0f0f0')
+        self.frm_track_info.pack(side=RIGHT, fill='both', expand=True)
 
         # Status bar
-        self.statusbar = Label(self.root, text="on the way…", bd=1, relief=SUNKEN, anchor=W)
+        self.statusbar = Label(self.root, text="Ready to play...", bd=1, relief=SUNKEN, 
+                              anchor=W, bg='#e0e0e0', fg='#333333', font=("Arial", 9), 
+                              padx=10, pady=5)
         self.statusbar.pack(side=BOTTOM, fill=X)
         self.commentateur.display = self.statusbar
         # table
@@ -129,7 +162,7 @@ class Application(Frame):
     def play(self):
         self.add2queue(self.track)
         if(self.player.playing is None):
-            self.btn_play["text"] = "stop"
+            self.btn_play["text"] = "⏸ Pause"
             self.scl_time.set(value=0)
             self.scl_son.set(value=self.player.getVolume())
             info = self.player.play(self.track)
@@ -138,11 +171,11 @@ class Application(Frame):
             self.lbl_trackLength.configure(text= intToTimeText(int(self.player.mp3Length)))
             self.user_pause = False
         elif(self.player.playing):
-            self.btn_play["text"] = "play"
+            self.btn_play["text"] = "▶ Play"
             self.player.pause()
             self.user_pause = True
         else:
-            self.btn_play["text"] = "stop"
+            self.btn_play["text"] = "⏸ Pause"
             self.player.resume()
             self.user_pause = False
         self.update_clock()
@@ -154,37 +187,41 @@ class Application(Frame):
                 self.name = name
                 self.font = font
         self.frm_track.destroy()
-        self.frm_track = Frame(self.root, height=300)
-        self.frm_track.pack(side=TOP, fill='x')
+        self.frm_track = Frame(self.root, bg='#f0f0f0')
+        self.frm_track.pack(side=TOP, fill='both', expand=True, padx=20, pady=10)
         self.getImage(self.track)
         self.frm_track.configure(bg = self.bgColor)
         self.frm_track_info.destroy()
-        self.frm_track_info = Frame(self.frm_track, height=300, bg=self.bgColor)
-        self.frm_track_info.pack(side=RIGHT, fill='x')
-        dict = {"title":InfoLabel(1, "title", "Tahoma 20 bold"),
-                "album":InfoLabel(2, "album", "Tahoma 18 bold"),
-                "artist":InfoLabel(3, "artist", "Tahoma 18 bold"),
-                "genre":InfoLabel(4, "genre", "Tahoma 18"),
-                "date":InfoLabel(5, "title", "Tahoma 16")}
+        self.frm_track_info = Frame(self.frm_track, bg=self.bgColor, relief='solid', bd=1, padx=20, pady=20)
+        self.frm_track_info.pack(side=RIGHT, fill='both', expand=True)
+        
+        dict = {"title":InfoLabel(1, "title", "Arial 18 bold"),
+                "album":InfoLabel(2, "album", "Arial 14 bold"),
+                "artist":InfoLabel(3, "artist", "Arial 14 bold"),
+                "genre":InfoLabel(4, "genre", "Arial 12"),
+                "date":InfoLabel(5, "title", "Arial 11")}
         i = 6
-        font = "Tahoma 10"
+        font = "Arial 10"
         for k in info.keys():
-            kname = str(k + ": ")
-            ink = Label(self.frm_track_info, text= kname, bg=self.bgColor, fg =self.fgColor, padx=2, pady=5)
+            kname = str(k.capitalize() + ":")
+            ink = Label(self.frm_track_info, text= kname, bg=self.bgColor, fg=self.fgColor, 
+                       font="Arial 10 bold", anchor='w', padx=5, pady=8)
             if(k in dict.keys()):
-                ink.grid(row=dict.get(k).id, column=0)
-                inv = Label(self.frm_track_info, text=self.mkString(info[k]), font=dict.get(k).font, bg=self.bgColor, fg =self.fgColor, padx=2, pady=5)
-                inv.grid(row=dict.get(k).id, column=1)
+                ink.grid(row=dict.get(k).id, column=0, sticky='w', padx=(0, 10))
+                inv = Label(self.frm_track_info, text=self.mkString(info[k]), font=dict.get(k).font, 
+                          bg=self.bgColor, fg=self.fgColor, anchor='w', padx=5, pady=8)
+                inv.grid(row=dict.get(k).id, column=1, sticky='w')
             else:
-                ink.grid(row=i, column=0)
-                inv = Label(self.frm_track_info, text=self.mkString(info[k]), font=font, bg=self.bgColor, fg =self.fgColor, padx=2, pady=5)
-                inv.grid(row=i, column=1)
+                ink.grid(row=i, column=0, sticky='w', padx=(0, 10))
+                inv = Label(self.frm_track_info, text=self.mkString(info[k]), font=font, 
+                          bg=self.bgColor, fg=self.fgColor, anchor='w', padx=5, pady=8)
+                inv.grid(row=i, column=1, sticky='w')
             i += 1
 
     def getImage(self, track):
         self.frm_image.destroy()
-        self.frm_image = Frame(self.frm_track, width=300, height=300)
-        self.frm_image.pack(side=LEFT)
+        self.frm_image = Frame(self.frm_track, width=350, height=350, bg='#ffffff', relief='solid', bd=1)
+        self.frm_image.pack(side=LEFT, padx=(0, 20))
 
         file = File(track)
         if('APIC:' in file.tags.keys()):
@@ -194,10 +231,10 @@ class Application(Frame):
             img.close()
             self.original = Image.open("image.jpg")
             resample = getattr(Image, "Resampling", Image).LANCZOS  # PIL>=10 removed ANTIALIAS
-            self.fitted = self.original.resize((300, 300), resample)
+            self.fitted = self.original.resize((350, 350), resample)
             self.imge = ImageTk.PhotoImage(self.fitted)  # PhotoImage(file="image.jpg")
             #image1 = PhotoImage(file="image.jpg")
-            panel = Label(self.frm_image, image = self.imge, width=300, height=300)
+            panel = Label(self.frm_image, image = self.imge, width=350, height=350, bg='#ffffff')
             panel.pack(side = "bottom", fill = "both", expand = "yes")
 
             rgb_im = self.fitted.convert('RGB')
@@ -205,8 +242,8 @@ class Application(Frame):
             R = 0
             G = 0
             B = 0
-            for i in range(300):
-                for j in range(300):
+            for i in range(min(350, self.fitted.width)):
+                for j in range(min(350, self.fitted.height)):
                     r, g, b = rgb_im.getpixel((i, j))
                     R += r
                     G += g
@@ -214,7 +251,12 @@ class Application(Frame):
                     sum += 1
 
             self.bgColor = '#%02x%02x%02x' % (R//sum, G//sum, B//sum)
-            self.fgColor = '#%02x%02x%02x' % (((R // sum) + 127)%255, ((G // sum) + 127)%255, ((B // sum) + 127)%255)
+            # Calculate complementary color for better contrast
+            brightness = (R//sum + G//sum + B//sum) / 3
+            if brightness > 127:
+                self.fgColor = '#333333'  # Dark text for light backgrounds
+            else:
+                self.fgColor = '#f0f0f0'  # Light text for dark backgrounds
             '''dict = ImageColorExtract.image_histogram(self.fitted)
             print(dict)
             self.bgColor = list(dict.keys())[0]
