@@ -20,7 +20,9 @@ def intToTimeText(i):
         return str(int(i/60)) + ":" + ("0" + str(i%60))[-2:]
 
 class Application(Frame):
-
+    # UI Constants
+    ALBUM_ART_SIZE = 350
+    
     def __init__(self):
         self.root = Tk()
         self.root.title("Musicana - Music Player")
@@ -238,6 +240,8 @@ class Application(Frame):
                 i += 1
 
     def getImage(self, track):
+        from io import BytesIO
+        
         self.frm_image.destroy()
         self.frm_image = Frame(self.frm_track, width=300, height=300, bg='#2d2d2d', relief=RIDGE, bd=2)
         self.frm_image.pack(side=LEFT, padx=(0, 20))
@@ -255,13 +259,15 @@ class Application(Frame):
             panel = Label(self.frm_image, image = self.imge, width=300, height=300, bd=0)
             panel.pack(fill=BOTH, expand=YES)
 
+            # Sample pixels for better performance (every 10th pixel)
             rgb_im = self.fitted.convert('RGB')
             sum = 0
             R = 0
             G = 0
             B = 0
-            for i in range(300):
-                for j in range(300):
+            step = 10  # Sample every 10th pixel
+            for i in range(0, min(self.ALBUM_ART_SIZE, self.fitted.width), step):
+                for j in range(0, min(self.ALBUM_ART_SIZE, self.fitted.height), step):
                     r, g, b = rgb_im.getpixel((i, j))
                     R += r
                     G += g
