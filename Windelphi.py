@@ -20,7 +20,9 @@ def intToTimeText(i):
         return str(int(i/60)) + ":" + ("0" + str(i%60))[-2:]
 
 class Application(Frame):
-
+    # UI Constants
+    ALBUM_ART_SIZE = 350
+    
     def __init__(self):
         self.root = Tk() # creates an Empty window
         self.root.title("Musicana - Smart Music Player")
@@ -115,7 +117,7 @@ class Application(Frame):
         self.frm_track = Frame(self.root, bg='#f0f0f0')
         self.frm_track.pack(side=TOP, fill='both', expand=True, padx=20, pady=10)
 
-        self.frm_image = Frame(self.frm_track, width=350, height=350, bg='#ffffff', relief='solid', bd=1)
+        self.frm_image = Frame(self.frm_track, width=self.ALBUM_ART_SIZE, height=self.ALBUM_ART_SIZE, bg='#ffffff', relief='solid', bd=1)
         self.frm_image.pack(side=LEFT, padx=(0, 20))
 
         self.frm_track_info = Frame(self.frm_track, bg='#f0f0f0')
@@ -219,31 +221,32 @@ class Application(Frame):
             i += 1
 
     def getImage(self, track):
+        from io import BytesIO
+        
         self.frm_image.destroy()
-        self.frm_image = Frame(self.frm_track, width=350, height=350, bg='#ffffff', relief='solid', bd=1)
+        self.frm_image = Frame(self.frm_track, width=self.ALBUM_ART_SIZE, height=self.ALBUM_ART_SIZE, bg='#ffffff', relief='solid', bd=1)
         self.frm_image.pack(side=LEFT, padx=(0, 20))
 
         file = File(track)
         if('APIC:' in file.tags.keys()):
             artwork = file.tags['APIC:'].data  # access APIC frame and grab the image
-            with open('image.jpg', 'wb') as img:
-                img.write(artwork)
-            img.close()
-            self.original = Image.open("image.jpg")
+            # Use BytesIO to avoid writing to disk
+            self.original = Image.open(BytesIO(artwork))
             resample = getattr(Image, "Resampling", Image).LANCZOS  # PIL>=10 removed ANTIALIAS
-            self.fitted = self.original.resize((350, 350), resample)
-            self.imge = ImageTk.PhotoImage(self.fitted)  # PhotoImage(file="image.jpg")
-            #image1 = PhotoImage(file="image.jpg")
-            panel = Label(self.frm_image, image = self.imge, width=350, height=350, bg='#ffffff')
+            self.fitted = self.original.resize((self.ALBUM_ART_SIZE, self.ALBUM_ART_SIZE), resample)
+            self.imge = ImageTk.PhotoImage(self.fitted)
+            panel = Label(self.frm_image, image = self.imge, width=self.ALBUM_ART_SIZE, height=self.ALBUM_ART_SIZE, bg='#ffffff')
             panel.pack(side = "bottom", fill = "both", expand = "yes")
 
+            # Sample pixels for better performance (every 10th pixel)
             rgb_im = self.fitted.convert('RGB')
             sum = 0
             R = 0
             G = 0
             B = 0
-            for i in range(min(350, self.fitted.width)):
-                for j in range(min(350, self.fitted.height)):
+            step = 10  # Sample every 10th pixel
+            for i in range(0, min(self.ALBUM_ART_SIZE, self.fitted.width), step):
+                for j in range(0, min(self.ALBUM_ART_SIZE, self.fitted.height), step):
                     r, g, b = rgb_im.getpixel((i, j))
                     R += r
                     G += g
