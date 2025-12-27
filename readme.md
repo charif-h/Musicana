@@ -33,7 +33,7 @@ The algorithm maintains a history of recently played tracks to avoid repetition.
 
 ### Prerequisites
 
-- Python 3.x
+- Python 3.7+
 - A music library with MP3 files
 
 ### Steps
@@ -124,7 +124,7 @@ MUSICANA_MUSIC_PATH=C:/Users/yourname/Music/
 - [ ] Link time slider to the interface for seeking
 - [ ] Add tracks table view
 - [ ] Add more detailed comments in code
-- [ ] Audio spectrum analyser visualization
+- [ ] Audio spectrum analyzer visualization
 - [ ] Playlist export functionality
 - [ ] User preference learning
 - [ ] Support for additional audio formats
