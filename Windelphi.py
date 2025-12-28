@@ -1,4 +1,12 @@
-from tkinter import *  # for UI
+"""
+Musicana - Intelligent Music Player with GUI
+
+Main graphical user interface for the Musicana music player.
+Provides album artwork display, playback controls, search/filtering,
+and dynamic color theming based on album art.
+"""
+
+from tkinter import *
 from mutagen import File
 from PIL import ImageTk, Image
 from dotenv import load_dotenv
@@ -11,19 +19,40 @@ import FileSystem
 import Comentateur
 import random
 import queue
-#from tkinter.ttk import *
+
 
 def intToTimeText(i):
-    if(i < 60):
+    """
+    Convert seconds to time display format.
+    
+    Args:
+        i (int): Time in seconds
+        
+    Returns:
+        str: Formatted time string (M:SS or just seconds if < 60)
+    """
+    if i < 60:
         return str(i)
     else:
-        return str(int(i/60)) + ":" + ("0" + str(i%60))[-2:]
+        return str(int(i / 60)) + ":" + ("0" + str(i % 60))[-2:]
 
 class Application(Frame):
+    """
+    Main application window for Musicana music player.
+    
+    Provides a modern UI with:
+    - Search/filter functionality
+    - Album artwork display with color theming
+    - Playback controls (play/pause, next, shuffle)
+    - Volume and time sliders
+    - Track information display
+    """
+    
     # UI Constants
     ALBUM_ART_SIZE = 350
     
     def __init__(self):
+        """Initialize the application window and load music library."""
         self.root = Tk()
         self.root.title("Musicana - Music Player")
         self.root.geometry("900x650")
@@ -32,6 +61,7 @@ class Application(Frame):
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.commentateur = Comentateur.Commentator()
 
+        # Load music library path from environment
         load_dotenv()
         music_path = os.getenv("MUSICANA_MUSIC_PATH", "C:/Users/chari/Documents/D/Music/")
         self.tracks = FileSystem.getAllMp3(music_path)
@@ -49,6 +79,7 @@ class Application(Frame):
         self.root.mainloop()
 
     def interface(self):
+        """Build the user interface layout."""
         # Main container with padding
         main_container = Frame(self.root, bg='#1e1e1e')
         main_container.pack(fill=BOTH, expand=True, padx=15, pady=10)
@@ -143,41 +174,48 @@ class Application(Frame):
                               bg='#2d2d2d', fg='#cccccc', padx=10, pady=5)
         self.statusbar.pack(side=BOTTOM, fill=X)
         self.commentateur.display = self.statusbar
-        # table
-        '''frm_table = Frame(self.root, width=300, height=50, bg='grey')
-        frm_table.pack(side='bottom', fill='both', padx=10, pady=5, expand=True)
-        height = len(self.tracks) + 1
-        width = len(self.titles)
-        for i in range(height):  # Rows
-            for j in range(width):  # Columns
-                txt = ""
-                if(i == 0):
-                    txt = self.titles[j]
-                else:
-                    txt = self.tracks[i - 1]
-                b = Label(frm_table, text=txt)
-                b.grid(row=i, column=j)'''
 
     def getTracksKeys(self, tracks):
+        """
+        Extract all unique metadata field names from tracks.
+        
+        Args:
+            tracks (dict): Dictionary of tracks with metadata
+            
+        Returns:
+            list: List of unique metadata field names
+        """
         keys = []
         for track in tracks.values():
             for k in track.keys():
-                if not(k in keys):
+                if k not in keys:
                     keys.append(k)
         return keys
 
     def findTrack(self):
+        """Apply search filter and play a random matching track."""
         filtered_tracks = FileSystem.filterTracks(self.tracks, self.inp_find.get()).keys()
         self.track = random.choice(list(filtered_tracks))
         self.player.playing = None
         self.play()
 
     def findTrackKey(self, event):
+        """Handle Enter key press in search box."""
         self.findTrack()
 
     def play(self):
+        """
+        Toggle play/pause or start playing the current track.
+        
+        Handles three states:
+        - No track playing: Start playback
+        - Track playing: Pause
+        - Track paused: Resume
+        """
         self.add2queue(self.track)
-        if(self.player.playing is None):
+        
+        if self.player.playing is None:
+            # Start new track
             self.btn_play["text"] = "⏸ PAUSE"
             self.btn_play["bg"] = "#ff6b6b"
             self.scl_time.set(value=0)
@@ -185,50 +223,73 @@ class Application(Frame):
             info = self.player.play(self.track)
             self.displayTrackInfo(info)
             self.scl_time.configure(to=self.player.mp3Length)
-            self.lbl_trackLength.configure(text= intToTimeText(int(self.player.mp3Length)))
+            self.lbl_trackLength.configure(text=intToTimeText(int(self.player.mp3Length)))
             self.user_pause = False
-        elif(self.player.playing):
+        elif self.player.playing:
+            # Pause current track
             self.btn_play["text"] = "▶ PLAY"
             self.btn_play["bg"] = "#00a86b"
             self.player.pause()
             self.user_pause = True
         else:
+            # Resume paused track
             self.btn_play["text"] = "⏸ PAUSE"
             self.btn_play["bg"] = "#ff6b6b"
             self.player.resume()
             self.user_pause = False
+        
         self.update_clock()
 
     def displayTrackInfo(self, info):
+        """
+        Display track metadata in the UI.
+        
+        Creates labels for track information with priority styling for
+        important fields (title, album, artist, genre, date).
+        
+        Args:
+            info (dict): Track metadata from ID3 tags
+        """
         class InfoLabel:
+            """Helper class for metadata field display configuration."""
             def __init__(self, id, name, font):
                 self.id = id
                 self.name = name
                 self.font = font
+        
+        # Rebuild track display area
         self.frm_track.destroy()
         self.frm_track = Frame(self.root.children['!frame'], bg='#1e1e1e')
         self.frm_track.pack(fill=BOTH, expand=True, pady=(0, 15))
         self.getImage(self.track)
-        self.frm_track.configure(bg = self.bgColor)
+        self.frm_track.configure(bg=self.bgColor)
         self.frm_track_info.destroy()
         self.frm_track_info = Frame(self.frm_track, bg=self.bgColor)
         self.frm_track_info.pack(side=LEFT, fill=BOTH, expand=True)
         
-        dict = {"title":InfoLabel(1, "title", ("Segoe UI", 16, "bold")),
-                "album":InfoLabel(2, "album", ("Segoe UI", 13)),
-                "artist":InfoLabel(3, "artist", ("Segoe UI", 13, "bold")),
-                "genre":InfoLabel(4, "genre", ("Segoe UI", 11)),
-                "date":InfoLabel(5, "date", ("Segoe UI", 10))}
+        # Priority fields with custom styling
+        dict = {
+            "title": InfoLabel(1, "title", ("Segoe UI", 16, "bold")),
+            "album": InfoLabel(2, "album", ("Segoe UI", 13)),
+            "artist": InfoLabel(3, "artist", ("Segoe UI", 13, "bold")),
+            "genre": InfoLabel(4, "genre", ("Segoe UI", 11)),
+            "date": InfoLabel(5, "date", ("Segoe UI", 10))
+        }
+        
         i = 6
         font = ("Segoe UI", 9)
+        
+        # Display metadata fields
         for k in info.keys():
             if k in dict.keys():
+                # Priority field with special styling
                 label_text = self.mkString(info[k])
                 lbl = Label(self.frm_track_info, text=label_text, 
                           font=dict.get(k).font, bg=self.bgColor, 
                           fg=self.fgColor, anchor=W, padx=15, pady=8)
                 lbl.grid(row=dict.get(k).id, column=0, sticky=W, columnspan=2)
             else:
+                # Other fields with standard styling
                 kname = str(k.title() + ": ")
                 ink = Label(self.frm_track_info, text=kname, bg=self.bgColor, 
                           fg='#999999', padx=15, pady=5, font=("Segoe UI", 9), anchor=W)
@@ -240,6 +301,15 @@ class Application(Frame):
                 i += 1
 
     def getImage(self, track):
+        """
+        Extract and display album artwork, calculate theme colors.
+        
+        Extracts album artwork from MP3 file, displays it, and calculates
+        average color for dynamic UI theming.
+        
+        Args:
+            track (str): Path to the MP3 file
+        """
         from io import BytesIO
         
         self.frm_image.destroy()
@@ -247,25 +317,29 @@ class Application(Frame):
         self.frm_image.pack(side=LEFT, padx=(0, 20))
 
         file = File(track)
-        if('APIC:' in file.tags.keys()):
+        if 'APIC:' in file.tags.keys():
+            # Extract and save album artwork
             artwork = file.tags['APIC:'].data
             with open('image.jpg', 'wb') as img:
                 img.write(artwork)
             img.close()
+            
+            # Resize and display artwork
             self.original = Image.open("image.jpg")
             resample = getattr(Image, "Resampling", Image).LANCZOS
             self.fitted = self.original.resize((300, 300), resample)
             self.imge = ImageTk.PhotoImage(self.fitted)
-            panel = Label(self.frm_image, image = self.imge, width=300, height=300, bd=0)
+            panel = Label(self.frm_image, image=self.imge, width=300, height=300, bd=0)
             panel.pack(fill=BOTH, expand=YES)
 
-            # Sample pixels for better performance (every 10th pixel)
+            # Calculate average color for theming (sample every 10th pixel for performance)
             rgb_im = self.fitted.convert('RGB')
             sum = 0
             R = 0
             G = 0
             B = 0
             step = 10  # Sample every 10th pixel
+            
             for i in range(0, min(self.ALBUM_ART_SIZE, self.fitted.width), step):
                 for j in range(0, min(self.ALBUM_ART_SIZE, self.fitted.height), step):
                     r, g, b = rgb_im.getpixel((i, j))
@@ -274,74 +348,100 @@ class Application(Frame):
                     B += b
                     sum += 1
 
-            avg_r, avg_g, avg_b = R//sum, G//sum, B//sum
+            avg_r, avg_g, avg_b = R // sum, G // sum, B // sum
+            
             # Create darker background based on album art
-            self.bgColor = '#%02x%02x%02x' % (max(0, avg_r-40), max(0, avg_g-40), max(0, avg_b-40))
+            self.bgColor = '#%02x%02x%02x' % (max(0, avg_r - 40), max(0, avg_g - 40), max(0, avg_b - 40))
+            
             # Better contrast for text
             brightness = (avg_r + avg_g + avg_b) / 3
             self.fgColor = '#ffffff' if brightness < 128 else '#000000'
         else:
             # No album art - show placeholder
-            placeholder = Label(self.frm_image, text="♪\\nNo Album Art", 
+            placeholder = Label(self.frm_image, text="♪\nNo Album Art", 
                               font="Segoe UI 14", bg='#2d2d2d', 
                               fg='#666666', width=300, height=300)
             placeholder.pack(fill=BOTH, expand=YES)
-            '''dict = ImageColorExtract.image_histogram(self.fitted)
-            print(dict)
-            self.bgColor = list(dict.keys())[0]
-            self.fgColor = list(dict.keys())[1]
-            print(self.bgColor + " " + self.fgColor)'''
-
-
-
-        #canvas.create_image(20, 20, anchor=NW, image=imge)
-        #image = Label(self.frm_track_info, image = img)
-        #image.grid(row=0, column=0)
-
-
     def update_clock(self):
+        """
+        Update playback position slider.
+        
+        Called periodically to update the time slider position.
+        Also checks if track has ended and triggers next track.
+        """
         if self.user_pause:
             return
-        if(self.player.playing):
-            #val = int(self.scl_time.get()) + 1
-            #self.scl_time.set(value=val)
+        
+        if self.player.playing:
             self.scl_time.set(value=self.player.getPos())
             self.root.after(1000, self.update_clock)
-        if(self.player.isTrackEnded()):
-            self.statusbar =  ""
+        
+        if self.player.isTrackEnded():
+            self.statusbar = ""
             print("song ended")
             self.next()
 
     def setPos(self, event):
-        #if(self.player.getPos() != int(self.scl_time.get())*1000):
+        """
+        Handle time slider position change (seeking).
+        
+        Args:
+            event: Tkinter event from slider release
+            
+        Note:
+            Seeking is currently not fully implemented in Player class
+        """
         self.player.setPos(int(self.scl_time.get()))
 
-
     def setVolume(self, event):
-        self.player.setVolume(int(self.scl_son.get())/100)
+        """
+        Handle volume slider change.
+        
+        Args:
+            event: Tkinter event from slider movement
+        """
+        self.player.setVolume(int(self.scl_son.get()) / 100)
 
     def on_closing(self):
-        """Handle window close button"""
+        """Handle window close button - cleanup and exit."""
         self.player.stop()
         self.root.destroy()
 
     def add2queue(self, track):
-        if (self.banned.full()):
+        """
+        Add track to history queue to avoid immediate repetition.
+        
+        Args:
+            track (str): Track path to add to history
+        """
+        if self.banned.full():
             self.banned.get()
         self.banned.put(track)
 
     def mkString(self, List, sep=" / "):
+        """
+        Convert a list to a separator-delimited string.
+        
+        Args:
+            List (list): List of strings to join
+            sep (str): Separator string (default: " / ")
+            
+        Returns:
+            str: Joined string
+        """
         s = ""
         for l in List:
             s += l + sep
         return s[:-3]
 
     def randomTrack(self):
+        """Select and play a completely random track."""
         self.track = Nexter_RandomWalk.nextIsRandom(self.tracks)
         self.player.playing = None
         self.play()
 
     def next(self):
+        """Select and play the next track using smart recommendation."""
         self.track = Nexter_RandomWalk.next(self.tracks, self.track, self.banned)
         self.player.playing = None
         self.play()
