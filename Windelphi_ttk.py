@@ -1,4 +1,13 @@
-from tkinter import *  # for UI
+"""
+DEPRECATED: Legacy GUI implementation using basic Tkinter widgets.
+
+This is an older version of the Musicana GUI. The current implementation
+is in Windelphi.py which features a modern dark theme and improved styling.
+
+This file is kept for reference only and is not actively used.
+"""
+
+from tkinter import *
 from mutagen import File
 from PIL import ImageTk, Image
 import Nexter_RandomWalk
