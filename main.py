@@ -115,8 +115,7 @@ def printrack(track, trackleng=0.0):
     print('title:\t', track['title'][0], "\t[", printime(trackleng), ']')
     
     for f in track.keys():
-        if f in track.keys():
-            print(f, ": ", track[f])
+        print(f, ": ", track[f])
 
 
 def play(track):

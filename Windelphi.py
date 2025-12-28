@@ -188,7 +188,7 @@ class Application(Frame):
         keys = []
         for track in tracks.values():
             for k in track.keys():
-                if not (k in keys):
+                if k not in keys:
                     keys.append(k)
         return keys
 
