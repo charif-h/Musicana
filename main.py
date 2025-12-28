@@ -8,6 +8,7 @@ recommendations and provides text-to-speech commentary.
 from mutagen.mp3 import MP3
 import queue
 import pygame
+import time
 import math
 import random
 import FileSystem
@@ -193,7 +194,6 @@ for i in range(300):
     print(printime(song.info.length - prog), "|", end="")
     
     while pygame.mixer.music.get_busy():
-        import time
         time.sleep(1)
         print("\b\b\b\b\b\b\b", end="")
         print(printime(song.info.length - prog), "|", end="")
