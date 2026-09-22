@@ -1,6 +1,5 @@
 mutagen
 pygame
 Pillow
-chardet
 pyttsx3
 python-dotenv
