@@ -1,0 +1,5 @@
+mutagen==1.47.0
+pygame==2.6.1
+Pillow==12.0.0
+pyttsx3==2.99
+python-dotenv==1.2.1
