@@ -115,7 +115,6 @@ MUSICANA_MUSIC_PATH=C:/Users/yourname/Music/
 - **mutagen**: MP3 metadata reading and manipulation
 - **pygame**: Audio playback engine
 - **Pillow (PIL)**: Image processing for album artwork
-- **chardet**: Character encoding detection
 - **pyttsx3**: Text-to-speech engine
 - **python-dotenv**: Environment variable management
 

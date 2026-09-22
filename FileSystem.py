@@ -2,7 +2,6 @@ import glob
 from mutagen.easyid3 import EasyID3
 #from mutagen.id3 import ID3
 #from mutagen.mp3 import MP3
-import chardet
 from collections import defaultdict
 
 def def_value():
@@ -18,7 +17,6 @@ def getAllMp3(path, v = None):
     percent = "00%"
     print(percent, end="")
     for filename in glob.iglob(path + '**/*.mp3', recursive=True):
-        #encoding = chardet.detect(str.encode(filename)).get("encoding")
         fn = filename.encode("utf-8", "ignore").decode("utf-8")
         for f in glob.glob(fn):
             #mp3info = EasyID3(f)
