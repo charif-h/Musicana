@@ -4,6 +4,8 @@ import mutagen
 from mutagen.easyid3 import EasyID3
 from mutagen.flac import Picture
 
+import TrackCache
+
 # Formats pygame.mixer can play; m4a/wma wait for the VLC backend (M3).
 AUDIO_EXTENSIONS = ('.mp3', '.flac', '.ogg', '.wav')
 
@@ -15,16 +17,35 @@ def listAudioFiles(path):
             if name.lower().endswith(AUDIO_EXTENSIONS):
                 yield os.path.normpath(os.path.join(root, name))
 
-def getAllTracks(path):
+# Tags are only re-read for files that are new or changed since the cached scan.
+def getAllTracks(path, cachePath=None):
+    cachePath = cachePath or TrackCache.defaultPath()
+    cache = TrackCache.load(cachePath)
+    root = os.path.normpath(path) + os.sep
+    entries = {k: v for k, v in cache.items() if not k.startswith(root)}  # other libraries
     tracks = {}
-    files = list(listAudioFiles(path))
-    Nb = len(files)
-    print("Loading tracks :")
+    toRead = []
+    for f in listAudioFiles(path):
+        try:
+            stat = os.stat(f)
+        except OSError as e:
+            print("Skipping unreadable file", f, ":", e)
+            continue
+        entry = cache.get(f)
+        if(TrackCache.isFresh(entry, stat)):
+            entries[f] = entry
+            tracks[f] = entry["tags"]
+        else:
+            toRead.append((f, stat))
+
+    Nb = len(toRead)
+    print("Loading tracks :", len(tracks), "cached,", Nb, "to read")
     percent = "00%"
     print(percent, end="")
-    for i, f in enumerate(files):
+    for i, (f, stat) in enumerate(toRead):
         try:
             tracks[f] = getTrackInfo(f)
+            entries[f] = TrackCache.makeEntry(stat, tracks[f])
         except (mutagen.MutagenError, OSError) as e:
             print("\nSkipping unreadable file", f, ":", e)
 
@@ -33,6 +54,11 @@ def getAllTracks(path):
         print(percent, end="")
 
     print("\b"*(1 + len(percent)), "100%...LOADED ", len(tracks))
+    if(entries != cache):
+        try:
+            TrackCache.save(cachePath, entries)
+        except OSError as e:
+            print("Could not save metadata cache", cachePath, ":", e)
     return tracks
 
 def filterTracks(tracks, v):

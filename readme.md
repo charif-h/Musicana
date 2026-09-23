@@ -14,6 +14,8 @@ python main.py
 
 `main.py` is the only entry point; the GUI itself lives in `Windelphi.py`.
 
+Scanned tags are cached in `%LOCALAPPDATA%\Musicana\cache.json`, so later launches only re-read new or changed files. Delete that file to force a full rescan.
+
 **つづく**
 
 # TODO
