@@ -14,7 +14,7 @@ Set `MUSIC_PATH` in `main.py` to your music root folder, then start the Tkinter 
 python main.py
 ```
 
-`main.py` is the only entry point; the GUI itself lives in `Windelphi.py`.
+`main.py` is the only entry point; the PySide6 GUI itself lives in `MainWindow.py` (library table in `TrackTableModel.py`, light/dark theme in `Theme.py`).
 
 Scanned tags are cached in `%LOCALAPPDATA%\Musicana\cache.json`, so later launches only re-read new or changed files. Delete that file to force a full rescan.
 

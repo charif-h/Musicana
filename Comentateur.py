@@ -1,5 +1,3 @@
-import tkinter
-
 import pyttsx3
 
 def safe(a):
@@ -66,7 +64,5 @@ class Commentator:
     def Display(self, txt):
         if callable(self.display):
             self.display(txt)
-        elif isinstance(self.display, tkinter.Label):
-            self.display.configure(text=txt)
         else:
             print(txt)
