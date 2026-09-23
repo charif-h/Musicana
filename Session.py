@@ -11,16 +11,23 @@ class PlayerSession():
         self.current = None
         self.commentator = commentator
 
+    # Returns None, keeping the current track, when nothing matches the filter.
     def start(self, filter=""):
         filteredTracks = FileSystem.filterTracks(self.tracks, filter)
+        if(len(filteredTracks) == 0):
+            return None
         self.setCurrent(random.choice(list(filteredTracks)))
         return self.current
 
     def next(self):
+        if(self.current is None):
+            return self.start()
         track, cause = Nexter_RandomWalk.next(self.tracks, self.current, self.history)
         return self.moveTo(track, cause)
 
     def random(self):
+        if(len(self.tracks) == 0):
+            return None
         track, cause = Nexter_RandomWalk.nextIsRandom(self.tracks)
         return self.moveTo(track, cause)
 

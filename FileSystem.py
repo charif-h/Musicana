@@ -66,12 +66,8 @@ def filterTracks(tracks, v):
     for (key, value) in tracks.items():
         if str(value).lower().find(str(v).lower()) >= 0:
             newDict[key] = value
-    if(len(newDict) > 0):
-        print(len(newDict), " tracks compatilbe with the filter ", v)
-        return newDict
-    else:
-        print("No compatilbe tracks with the filter ", v)
-        return tracks
+    print(len(newDict), " tracks compatilbe with the filter ", v)
+    return newDict
 
 # Returns {tag: [lowercase values]} for any format mutagen reads, e.g.
 # {"artist": ["queen", "david bowie"], "title": ["under pressure"]}.

@@ -65,6 +65,6 @@ class Commentator:
 
     def Display(self, txt):
         if isinstance(self.display, tkinter.Label):
-            self.display.text = txt
+            self.display.configure(text=txt)
         else:
             print(txt)

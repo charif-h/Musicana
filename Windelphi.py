@@ -82,7 +82,10 @@ class Application(Frame):
         self.root.mainloop()
 
     def findTrack(self):
-        self.session.start(self.inp_find.get())
+        filter = self.inp_find.get()
+        if(self.session.start(filter) is None):
+            self.statusbar.configure(text="No track matches '" + filter + "'")
+            return
         self.playCurrent()
 
     def findTrackKey(self, event):
@@ -93,6 +96,9 @@ class Application(Frame):
         self.play()
 
     def play(self):
+        if(self.session.current is None):
+            self.statusbar.configure(text="No audio files found in the music folder")
+            return
         if(self.player.playing is None):
             self.btn_play["text"] = "stop"
             self.scl_time.set(value=0)
@@ -177,7 +183,7 @@ class Application(Frame):
             self.scl_time.set(value=self.player.getPos())
             self.root.after(1000, self.update_clock)
         if(self.player.isTrackEnded()):
-            self.statusbar =  ""
+            self.statusbar.configure(text="")
             print("song ended")
             self.next()
 
