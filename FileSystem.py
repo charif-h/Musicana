@@ -1,7 +1,5 @@
 import glob
 from mutagen.easyid3 import EasyID3
-#from mutagen.id3 import ID3
-#from mutagen.mp3 import MP3
 from collections import defaultdict
 
 def def_value():
@@ -19,7 +17,6 @@ def getAllMp3(path, v = None):
     for filename in glob.iglob(path + '**/*.mp3', recursive=True):
         fn = filename.encode("utf-8", "ignore").decode("utf-8")
         for f in glob.glob(fn):
-            #mp3info = EasyID3(f)
             mp3info = getMp3Info(f)
             tracks[fn] = mp3info
 

@@ -1,5 +1,6 @@
 import pygame
 import mutagen
+import mutagen.mp3
 
 from FileSystem import getMp3Info
 
@@ -18,21 +19,15 @@ class Player():
         pygame.mixer.music.load(song)
         mp3info = getMp3Info(song)
         print(mp3info)
-        #print(mp3.info.sample_rate)
-        pygame.mixer.music.play() #frequency=mp3.info.sample_rate
+        pygame.mixer.music.play()
         self.playing = pygame.mixer.music.get_busy() == 1
         self.mp3Length = mp3.info.length
         return mp3info
 
     def getImage(self, path):
         print(path)
-        #print(mutagen.File(path))
         print(mutagen.File(path)['APIC'])
         return mutagen.File(path)['APIC'].data
-        '''tags = ID3(path)
-        pict = tags.get("APIC:").data
-        im = Image.open(BytesIO(pict))
-        print('Picture size : ' + str(im.size))'''
 
     def pause(self):
         pygame.mixer.music.pause()
@@ -55,6 +50,4 @@ class Player():
         return pygame.mixer.music.get_pos()/1000
 
     def setPos(self, v):
-        '''pygame.mixer.music.stop()
-        pygame.mixer.music.set_pos(v)
-        pygame.mixer.music.play(0, v)'''
+        pass  # seeking is not supported by pygame.mixer; see M3 (python-vlc)
