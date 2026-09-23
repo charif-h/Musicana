@@ -1,11 +1,12 @@
 import os
 
 from PySide6.QtCore import QByteArray, QItemSelectionModel, Qt, QTimer, Signal
-from PySide6.QtGui import QGuiApplication, QIcon, QKeySequence, QPainter, QPalette, QPixmap
+from PySide6.QtGui import QActionGroup, QGuiApplication, QIcon, QKeySequence, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFileDialog, QFrame, QHBoxLayout,
                                QHeaderView, QLabel, QLineEdit, QMainWindow, QProgressBar, QPushButton, QSlider,
                                QStyle, QTableView, QVBoxLayout, QWidget)
 
+import Agents
 import FileSystem
 import Session
 import Settings
@@ -30,7 +31,8 @@ class MainWindow(QMainWindow):
     def __init__(self, player, commentator, settings):
         super().__init__()
         self.transition = 0  # id of the latest transition: an older announcement finishing is ignored
-        self.session = Session.PlayerSession({}, commentator)  # until loadLibrary()/setLibrary()
+        self.agent = Agents.byId(settings["agent"])
+        self.session = Session.PlayerSession({}, commentator, agent=self.agent)  # until loadLibrary()/setLibrary()
         self.scanner = None
         self.player = player
         self.commentator = commentator
@@ -41,6 +43,15 @@ class MainWindow(QMainWindow):
         fileMenu.addAction("Change &music folder…", QKeySequence.Open, self.changeMusicFolder)
         fileMenu.addSeparator()
         fileMenu.addAction("&Quit", QKeySequence("Ctrl+Q"), self.close)
+        agentMenu = self.menuBar().addMenu("&Agent")
+        agentMenu.setToolTipsVisible(True)
+        agentGroup = QActionGroup(self)
+        for agent in Agents.AGENTS:
+            action = agentMenu.addAction(agent.name, lambda agent=agent: self.setAgent(agent))
+            action.setCheckable(True)
+            action.setChecked(agent is self.agent)
+            action.setToolTip(agent.description)
+            agentGroup.addAction(action)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -130,8 +141,11 @@ class MainWindow(QMainWindow):
         self.prg_scan.setFormat("Reading tags %v / %m")
         self.prg_scan.hide()
         self.statusBar().addPermanentWidget(self.prg_scan)
+        self.lbl_agent = QLabel()
+        self.statusBar().addPermanentWidget(self.lbl_agent)
         self.lbl_count = QLabel()
         self.statusBar().addPermanentWidget(self.lbl_count)
+        self.showAgent()
         self.statusBar().showMessage("on the way…")
         self.updateCount()
 
@@ -233,7 +247,7 @@ class MainWindow(QMainWindow):
 
     def setLibrary(self, tracks):
         self.prg_scan.hide()
-        self.session = Session.PlayerSession(tracks, self.commentator)
+        self.session = Session.PlayerSession(tracks, self.commentator, agent=self.agent)
         self.session.start()
         previousModel = self.trackModel
         self.trackModel = TrackTableModel(tracks, self)
@@ -248,6 +262,17 @@ class MainWindow(QMainWindow):
     def setLibraryControlsEnabled(self, enabled):
         for w in (self.inp_find, self.btn_find, self.btn_play, self.btn_next, self.btn_random, self.sld_time, self.tbl_tracks):
             w.setEnabled(enabled)
+
+    def setAgent(self, agent):
+        self.agent = agent
+        self.session.agent = agent
+        self.settings["agent"] = agent.id
+        self.showAgent()
+        self.showStatus("Next tracks are now chosen by: " + agent.name)
+
+    def showAgent(self):
+        self.lbl_agent.setText("Agent: " + self.agent.name)
+        self.lbl_agent.setToolTip(self.agent.description)
 
     def findTrack(self):
         filter = self.inp_find.text()

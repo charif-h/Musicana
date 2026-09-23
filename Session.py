@@ -1,15 +1,17 @@
 import random
 from collections import deque
 
+import Agents
 import FileSystem
 import Nexter_RandomWalk
 
 class PlayerSession():
-    def __init__(self, tracks, commentator=None, historySize=20):
+    def __init__(self, tracks, commentator=None, historySize=20, agent=None):
         self.tracks = tracks
         self.history = deque(maxlen=historySize)  # recently played, excluded from next()
         self.current = None
         self.commentator = commentator
+        self.agent = agent or Agents.AGENTS[0]  # the recommendation agent that picks the next track
 
     # Returns None, keeping the current track, when nothing matches the filter.
     def start(self, filter=""):
@@ -26,7 +28,7 @@ class PlayerSession():
             if(onDone is not None):
                 onDone()
             return track
-        track, cause = Nexter_RandomWalk.next(self.tracks, self.current, self.history)
+        track, cause = self.agent.next(self.tracks, self.current, self.history)
         return self.moveTo(track, cause, onDone)
 
     def random(self, onDone=None):
