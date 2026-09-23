@@ -1,9 +1,11 @@
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import (QAbstractSlider, QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
-                               QPushButton, QSlider, QStyle, QTableView, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QFrame, QHBoxLayout, QHeaderView, QLabel,
+                               QLineEdit, QMainWindow, QPushButton, QSlider, QStyle, QTableView, QVBoxLayout,
+                               QWidget)
 
 import FileSystem
+from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
 ART_SIZE = 200
 MAIN_TAGS = ("title", "artist", "album", "genre", "date")
@@ -84,10 +86,31 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.frm_nowPlaying)
 
         # library
+        self.trackModel = TrackTableModel(self.session.tracks, self)
+        self.trackProxy = TrackFilterProxy(self)
+        self.trackProxy.setSourceModel(self.trackModel)
         self.tbl_tracks = QTableView()
+        self.tbl_tracks.setModel(self.trackProxy)
+        self.tbl_tracks.horizontalHeader().setSortIndicator(1, Qt.AscendingOrder)
+        self.tbl_tracks.setSortingEnabled(True)
+        self.tbl_tracks.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tbl_tracks.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.tbl_tracks.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tbl_tracks.setAlternatingRowColors(True)
+        self.tbl_tracks.setWordWrap(False)
+        self.tbl_tracks.verticalHeader().hide()
+        self.tbl_tracks.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        header = self.tbl_tracks.horizontalHeader()
+        header.setHighlightSections(False)
+        for column, width in enumerate((280, 180, 200, 120)):
+            header.resizeSection(column, width)
+        header.setStretchLastSection(True)
         layout.addWidget(self.tbl_tracks, 1)
 
+        self.lbl_count = QLabel()
+        self.statusBar().addPermanentWidget(self.lbl_count)
         self.statusBar().showMessage("on the way…")
+        self.updateCount()
 
         # Polled rather than using VLC events: those fire on a VLC thread, and Qt widgets are not thread-safe.
         self.clock = QTimer(self)
@@ -97,6 +120,8 @@ class MainWindow(QMainWindow):
 
         self.commentator.display = self.showStatus
         self.inp_find.returnPressed.connect(self.findTrack)
+        self.inp_find.textChanged.connect(self.filterTable)
+        self.tbl_tracks.activated.connect(self.playRow)
         self.btn_find.clicked.connect(self.findTrack)
         self.btn_play.clicked.connect(self.play)
         self.btn_next.clicked.connect(self.next)
@@ -123,6 +148,18 @@ class MainWindow(QMainWindow):
             return
         self.playCurrent()
 
+    def filterTable(self, text):
+        self.trackProxy.setFilterText(text)
+        self.updateCount()
+
+    def updateCount(self):
+        shown, total = self.trackProxy.rowCount(), self.trackModel.rowCount()
+        self.lbl_count.setText(str(total) + " tracks" if shown == total else str(shown) + " of " + str(total) + " tracks")
+
+    def playRow(self, index):
+        self.session.select(index.data(PATH_ROLE))
+        self.playCurrent()
+
     def playCurrent(self):
         self.player.playing = None
         self.play()
@@ -134,6 +171,7 @@ class MainWindow(QMainWindow):
         if(self.player.playing is None):
             self.player.play(self.session.current)
             self.showTrack(self.session.current)
+            self.trackModel.setCurrent(self.session.current)
             self.sld_time.setValue(0)
         elif(self.player.playing):
             self.player.pause()

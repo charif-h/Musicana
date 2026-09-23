@@ -65,10 +65,13 @@ def getAllTracks(path, cachePath=None):
             print("Could not save metadata cache", cachePath, ":", e)
     return tracks
 
+def matches(tags, v):
+    return str(tags).lower().find(str(v).lower()) >= 0
+
 def filterTracks(tracks, v):
     newDict = dict()
     for (key, value) in tracks.items():
-        if str(value).lower().find(str(v).lower()) >= 0:
+        if matches(value, v):
             newDict[key] = value
     print(len(newDict), " tracks compatilbe with the filter ", v)
     return newDict
