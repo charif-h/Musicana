@@ -54,7 +54,9 @@ class Application(Frame):
         btn_random.pack(side='left')
 
         self.scl_time = Scale(frm_player, from_=0, to=342, orient=HORIZONTAL)
+        self.scl_time.bind("<ButtonPress-1>", self.startSeek)
         self.scl_time.bind("<ButtonRelease-1>", self.setPos)
+        self.seeking = False
         self.scl_time.pack(side=LEFT)
         self.lbl_trackLength = Label(frm_player, text="00", padx=1, pady=5)
         self.lbl_trackLength.pack(side=LEFT)
@@ -180,14 +182,19 @@ class Application(Frame):
 
     def update_clock(self):
         if(self.player.playing):
-            self.scl_time.set(value=self.player.getPos())
+            if not(self.seeking):
+                self.scl_time.set(value=self.player.getPos())
             self.root.after(1000, self.update_clock)
         if(self.player.isTrackEnded()):
             self.statusbar.configure(text="")
             print("song ended")
             self.next()
 
+    def startSeek(self, event):
+        self.seeking = True
+
     def setPos(self, event):
+        self.seeking = False
         self.player.setPos(int(self.scl_time.get()))
 
     def setVolume(self, event):

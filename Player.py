@@ -40,4 +40,4 @@ class Player():
         return max(self.mediaPlayer.get_time(), 0)/1000
 
     def setPos(self, v):
-        pass  # seeking lands with #22
+        self.mediaPlayer.set_time(int(v*1000))
