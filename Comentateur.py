@@ -19,6 +19,9 @@ def safe(a):
             a = str(a).replace(k, rep[k])
         return a
 
+def first(track, key):
+    return safe(track[key][0]) if key in track else ""
+
 class Commentator:
     def __init__(self):
         en_voice_id = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_EN-US_ZIRA_11.0"
@@ -29,25 +32,25 @@ class Commentator:
 
     def transition(self, t1, t2, cause):
         if(cause == "album"):
-            self.say("We leave you with the title " + safe(t2['title'][0]) + " from the same album " + safe(t1['album'][0]))
+            self.say("We leave you with the title " + first(t2, 'title') + " from the same album " + first(t1, 'album'))
         elif(cause == "artist"):
-            self.say("We keep going with the same artist " + safe(t1['artist'][0]) + ", we listen to the title " + safe(t2['title'][0]))
+            self.say("We keep going with the same artist " + first(t1, 'artist') + ", we listen to the title " + first(t2, 'title'))
         elif (cause == "genre"):
-            if(safe(t1['album'][0]) == safe(t2['album'][0])):
-                self.say("Within the same ambience of the music " + str(safe(t1['genre'])) + ", we invite you to admire the title " + safe(t2['title'][0]))
-            elif(safe(t1['artist'][0]) == safe(t2['artist'][0])):
-                self.say("Within the same ambience of the artist " + safe(t2['artist'][0]) + ", and his music " + str(safe(t1['genre'])) + " we propose to you the title " + safe(t2['title'][0]))
+            if(first(t1, 'album') == first(t2, 'album')):
+                self.say("Within the same ambience of the music " + first(t1, 'genre') + ", we invite you to admire the title " + first(t2, 'title'))
+            elif(first(t1, 'artist') == first(t2, 'artist')):
+                self.say("Within the same ambience of the artist " + first(t2, 'artist') + ", and his music " + first(t1, 'genre') + " we propose to you the title " + first(t2, 'title'))
             else:
-                self.say("We continue with the same pace of music " + str(safe(t2['genre'])) + " we present for you the artist " + safe(t2['artist'][0]) + ", through his title " + safe(t2['title'][0]))
+                self.say("We continue with the same pace of music " + first(t2, 'genre') + " we present for you the artist " + first(t2, 'artist') + ", through his title " + first(t2, 'title'))
         elif (cause == "date"):
-            if (safe(t1['album'][0]) == safe(t2['album'][0])):
-                self.say("Another title from the same albume " + safe(t2['album'][0]) + ", of the year " + safe(t2['date'][0]) + ", we listen to the title " + safe(t2['title'][0]))
-            elif (safe(t1['artist'][0]) == safe(t2['artist'][0])):
-                self.say(safe(t2['date'][0]) + " was a rech year for the artist " + safe(t2['artist'][0]) + ", so listen with us to his title " + safe(t2['title'][0]) + " from the same year.")
+            if (first(t1, 'album') == first(t2, 'album')):
+                self.say("Another title from the same albume " + first(t2, 'album') + ", of the year " + first(t2, 'date') + ", we listen to the title " + first(t2, 'title'))
+            elif (first(t1, 'artist') == first(t2, 'artist')):
+                self.say(first(t2, 'date') + " was a rech year for the artist " + first(t2, 'artist') + ", so listen with us to his title " + first(t2, 'title') + " from the same year.")
             else:
-                self.say("We will stay in the ambience of the year " + safe(t2['date'][0]) + ", but with anothe artist, so allow us to present to you " + safe(t2['title'][0]) + " of " + safe(t2['artist'][0]))
+                self.say("We will stay in the ambience of the year " + first(t2, 'date') + ", but with anothe artist, so allow us to present to you " + first(t2, 'title') + " of " + first(t2, 'artist'))
         else:
-            self.say("It is time to change, listen with use to " + safe(t2['title'][0]))
+            self.say("It is time to change, listen with use to " + first(t2, 'title'))
 
     def say(self, txt):
         self.Display(txt)

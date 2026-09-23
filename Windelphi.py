@@ -248,11 +248,15 @@ class Application(Frame):
         return s[:-3]
 
     def randomTrack(self):
-        self.track = Nexter_RandomWalk.nextIsRandom(self.tracks)
+        previous = self.track
+        self.track, cause = Nexter_RandomWalk.nextIsRandom(self.tracks)
+        self.commentateur.transition(self.tracks[previous], self.tracks[self.track], cause)
         self.player.playing = None
         self.play()
 
     def next(self):
-        self.track = Nexter_RandomWalk.next(self.tracks, self.track, self.banned)
+        previous = self.track
+        self.track, cause = Nexter_RandomWalk.next(self.tracks, self.track, list(self.banned.queue))
+        self.commentateur.transition(self.tracks[previous], self.tracks[self.track], cause)
         self.player.playing = None
         self.play()

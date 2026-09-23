@@ -6,6 +6,7 @@ import math
 import random
 import FileSystem
 import Comentateur
+import Nexter_RandomWalk
 import mutagen.mp3
 
 
@@ -13,49 +14,6 @@ def printime(l):
     m = math.floor(l/60)
     s = math.floor(l%60)
     return str(m).zfill(2)  + ":" + str(s).zfill(2)
-
-def intersection(lst1, lst2):
-    return list(set(lst1) & set(lst2))
-
-def next(track, noHistory):
-    #features = ['random', 'date', 'album', 'album', 'artist', 'artist', 'artist', 'genre', 'genre', "genre"]
-    features = ['date', 'album', 'album', 'artist', 'artist', 'artist', 'genre', 'genre', "genre", "comment"]
-    feature = random.choice(features)
-    print(feature, end="")
-    if(feature == 'random'):
-        print()
-        return nextIsRandom(tracks)
-    else:
-        val = ""
-        if(feature in tracks[track].keys()):
-            val = tracks[track][feature]
-        else:
-            return nextIsRandom(tracks, track)
-        print(": ", val)
-        '''txt = "Nous restons avec le même " + feature
-        for v in val:
-            txt += " " + v
-        engine.say(txt)
-        engine.runAndWait()'''
-        paths = []
-        for t in tracks:
-            if(t not in list(noHistory.queue)):
-                c = tracks[t][feature] if feature in tracks[t].keys() else []
-                if(len(intersection(c, val)) > 0):
-                    paths.append(t)
-        if(len(paths) == 0):
-            return nextIsRandom(tracks, track)
-
-        ret = random.choice(paths)
-
-        Nadia.transition(tracks[track], tracks[ret], feature)
-        return ret
-
-def nextIsRandom(tracks, track):
-    print("random")
-    ret = random.choice(list(tracks.keys()))
-    Nadia.transition(tracks[track], tracks[ret], "random")
-    return ret
 
 def printrack(track, trackleng = 0.0):
     print('title:\t', track['title'][0], "\t[", printime(trackleng), ']')
@@ -138,4 +96,6 @@ for i in range(300):
         prog += 1
     print("*"*i)
     print(i, ") ", end="")
-    track = next(track, noHistory)
+    previous = track
+    track, cause = Nexter_RandomWalk.next(tracks, track, list(noHistory.queue))
+    Nadia.transition(tracks[previous], tracks[track], cause)
