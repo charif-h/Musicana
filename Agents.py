@@ -123,7 +123,55 @@ class EraExplorer(RecommendationAgent):
             return RandomWalk().next(tracks, current, history)
         return random.choice(pool), "date"
 
-AGENTS = [RandomWalk(), Shuffle(), AlbumJourney(), GenreExplorer(), EraExplorer()]
+# Needs the audio vectors (AudioFeatures), which the window computes in the background while it is selected.
+class SoundAlike(RecommendationAgent):
+    id = "sound-alike"
+    name = "Sound-alike"
+    description = "Picks among the 10 tracks whose sound (timbre, harmony, tempo…) is closest to the current one. Each track's audio is analysed once, in the background."
+    topN = 10
+    needsAudioVectors = True
+
+    def __init__(self):
+        self.paths = []
+        self.index = {}
+        self.matrix = None
+
+    def setVectors(self, vectors):
+        import numpy
+        vectors = {p: v for p, v in vectors.items() if v is not None}  # None: could not be analysed
+        self.paths = list(vectors)
+        self.index = {p: i for i, p in enumerate(self.paths)}
+        if not(self.paths):
+            self.matrix = None
+            return
+        m = numpy.array([vectors[p] for p in self.paths], dtype="float64")
+        m = (m - m.mean(axis=0)) / (m.std(axis=0) + 1e-9)  # every feature weighs the same
+        self.matrix = m / (numpy.linalg.norm(m, axis=1, keepdims=True) + 1e-9)  # rows . row = cosine similarity
+
+    # The n analysed tracks most similar to `current`, skipping recent tracks and other copies of the same song.
+    def similar(self, tracks, current, history, n):
+        import numpy
+        avoid = set(history) | {current}
+        titles = {tracks[t]["title"][0] for t in avoid if t in tracks}
+        scores = self.matrix @ self.matrix[self.index[current]]
+        found = []
+        for i in numpy.argsort(-scores):
+            t = self.paths[i]
+            if(t in tracks and t not in avoid and tracks[t]["title"][0] not in titles):
+                found.append(t)
+                if(len(found) == n):
+                    break
+        return found
+
+    def next(self, tracks, current, history):
+        if(self.matrix is None or current not in self.index):
+            return RandomWalk().next(tracks, current, history)  # not analysed yet
+        candidates = self.similar(tracks, current, history, self.topN)
+        if not(candidates):
+            return RandomWalk().next(tracks, current, history)
+        return random.choice(candidates), "sound"
+
+AGENTS = [RandomWalk(), Shuffle(), AlbumJourney(), GenreExplorer(), EraExplorer(), SoundAlike()]
 
 def byId(agentId):
     return next((a for a in AGENTS if a.id == agentId), AGENTS[0])

@@ -7,10 +7,12 @@ from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication,
                                QStyle, QTableView, QVBoxLayout, QWidget)
 
 import Agents
+import AudioFeatures
 import FileSystem
 import Session
 import Settings
 import Theme
+from AudioAnalyzer import AudioAnalyzer
 from LibraryScanner import LibraryScanner
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
@@ -34,6 +36,8 @@ class MainWindow(QMainWindow):
         self.agent = Agents.byId(settings["agent"])
         self.session = Session.PlayerSession({}, commentator, agent=self.agent)  # until loadLibrary()/setLibrary()
         self.scanner = None
+        self.analyzer = None
+        self.vectors = {}  # audio vectors of the library's tracks, for agents that need them
         self.player = player
         self.commentator = commentator
         self.settings = settings
@@ -141,6 +145,11 @@ class MainWindow(QMainWindow):
         self.prg_scan.setFormat("Reading tags %v / %m")
         self.prg_scan.hide()
         self.statusBar().addPermanentWidget(self.prg_scan)
+        self.prg_audio = QProgressBar()
+        self.prg_audio.setMaximumWidth(240)
+        self.prg_audio.setFormat("Analysing audio %v / %m")
+        self.prg_audio.hide()
+        self.statusBar().addPermanentWidget(self.prg_audio)
         self.lbl_agent = QLabel()
         self.statusBar().addPermanentWidget(self.lbl_agent)
         self.lbl_count = QLabel()
@@ -229,6 +238,7 @@ class MainWindow(QMainWindow):
 
     # The window stays usable while the scan runs on a background thread.
     def loadLibrary(self, path):
+        self.stopAnalysis()
         self.clock.stop()
         self.player.stop()
         self.refreshIcons()
@@ -245,7 +255,7 @@ class MainWindow(QMainWindow):
         self.prg_scan.setRange(0, total)
         self.prg_scan.setValue(done)
 
-    def setLibrary(self, tracks):
+    def setLibrary(self, tracks, vectors=None):
         self.prg_scan.hide()
         self.session = Session.PlayerSession(tracks, self.commentator, agent=self.agent)
         self.session.start()
@@ -258,6 +268,50 @@ class MainWindow(QMainWindow):
         self.updateCount()
         self.setLibraryControlsEnabled(True)
         self.showStatus(str(len(tracks)) + " tracks loaded" if tracks else "No audio files found in the music folder")
+        self.vectors = vectors if vectors is not None else AudioFeatures.loadVectors(tracks)
+        self.shareVectors()
+        self.startAnalysisIfNeeded()
+
+    def shareVectors(self):
+        for agent in Agents.AGENTS:
+            if(getattr(agent, "needsAudioVectors", False)):
+                agent.setVectors(self.vectors)
+
+    # Analyses the tracks that have no audio vector yet, only while an agent that needs them is selected.
+    def startAnalysisIfNeeded(self):
+        if not(getattr(self.agent, "needsAudioVectors", False)):
+            return
+        if(self.analyzer is not None and self.analyzer.isRunning()):
+            return
+        todo = [p for p in self.session.tracks if p not in self.vectors]
+        if not(todo):
+            return
+        self.prg_audio.setRange(0, len(todo))
+        self.prg_audio.setValue(0)
+        self.prg_audio.show()
+        self.showStatus("Analysing the sound of " + str(len(todo)) + " tracks in the background…")
+        self.analyzer = AudioAnalyzer(todo, self)
+        self.analyzer.progress.connect(lambda done, total: self.prg_audio.setValue(done))
+        self.analyzer.analysed.connect(self.vectorsAnalysed)
+        self.analyzer.finished.connect(self.analysisFinished)
+        self.analyzer.start()
+
+    def vectorsAnalysed(self, batch):
+        self.vectors.update(batch)
+        self.shareVectors()
+
+    def analysisFinished(self):
+        self.prg_audio.hide()
+        if(self.session.tracks and all(p in self.vectors for p in self.session.tracks)):
+            skipped = sum(1 for v in self.vectors.values() if v is None)
+            self.showStatus("Audio analysis complete: " + str(len(self.vectors) - skipped) + " tracks"
+                            + (" (" + str(skipped) + " could not be decoded)" if skipped else ""))
+
+    def stopAnalysis(self):
+        if(self.analyzer is not None and self.analyzer.isRunning()):
+            self.analyzer.requestInterruption()
+            self.analyzer.wait()
+        self.prg_audio.hide()
 
     def setLibraryControlsEnabled(self, enabled):
         for w in (self.inp_find, self.btn_find, self.btn_play, self.btn_next, self.btn_random, self.sld_time, self.tbl_tracks):
@@ -269,6 +323,7 @@ class MainWindow(QMainWindow):
         self.settings["agent"] = agent.id
         self.showAgent()
         self.showStatus("Next tracks are now chosen by: " + agent.name)
+        self.startAnalysisIfNeeded()
 
     def showAgent(self):
         self.lbl_agent.setText("Agent: " + self.agent.name)
@@ -405,6 +460,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.seek)
 
     def closeEvent(self, event):
+        self.stopAnalysis()
         if(self.scanner is not None and self.scanner.isRunning()):
             self.scanner.requestInterruption()
             self.scanner.wait()
