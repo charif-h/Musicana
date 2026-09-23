@@ -6,6 +6,14 @@ The final idea of the this project is to have many recommendations agents using 
 # How to use it?
 Root folder with subfolders getallMp3
 
+Set `MUSIC_PATH` in `main.py` to your music root folder, then start the Tkinter GUI with:
+
+```
+python main.py
+```
+
+`main.py` is the only entry point; the GUI itself lives in `Windelphi.py`.
+
 **つづく**
 
 # TODO

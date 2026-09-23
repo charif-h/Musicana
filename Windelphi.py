@@ -20,12 +20,12 @@ def intToTimeText(i):
 
 class Application(Frame):
 
-    def __init__(self):
+    def __init__(self, musicPath):
         self.root = Tk() # creates an Empty window
         #self.root.minsize(300,300) # set size as 300 x 300 wide, Change this accordingly
         self.commentateur = Comentateur.Commentator()
 
-        self.tracks = FileSystem.getAllMp3('C:\\Users\\chari\\Documents\\D\\Music/')
+        self.tracks = FileSystem.getAllMp3(musicPath)
         self.player = Player.Player()
         self.commentateur.say("Hello, Any filter to start from? : ")
         self.titles = self.getTracksKeys(self.tracks)
@@ -35,7 +35,6 @@ class Application(Frame):
         self.fgColor = "black"
 
         self.interface()
-        self.findTrack()
 
     def interface(self):
         # filter
@@ -103,6 +102,8 @@ class Application(Frame):
                     txt = self.tracks[i - 1]
                 b = Label(frm_table, text=txt)
                 b.grid(row=i, column=j)'''
+
+    def run(self):
         self.root.mainloop()
 
     def getTracksKeys(self, tracks):
