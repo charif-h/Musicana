@@ -1,6 +1,5 @@
-import tkinter
-
-import pyttsx3
+import queue
+import threading
 
 def safe(a):
     if (a is None):
@@ -19,40 +18,91 @@ def safe(a):
             a = str(a).replace(k, rep[k])
         return a
 
+def first(track, key):
+    return safe(track[key][0]) if key in track else ""
+
+SVSF_ASYNC = 1
+SVSF_PURGE = 2
+VOICE = "Zira"
+RATE = 2  # SAPI's -10..10 scale; about 150 words per minute
+
+# Speaks through Windows SAPI on its own thread so the UI never waits: say() returns at once and
+# onDone() is called (from the speech thread) once the text is spoken, cut by cancel(), or could not be spoken.
 class Commentator:
     def __init__(self):
-        en_voice_id = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_EN-US_ZIRA_11.0"
-        self.engine = pyttsx3.init(driverName='sapi5')
         self.display = None
-        self.engine.setProperty('voice', en_voice_id)
-        self.engine.setProperty('rate', 150)
+        self.requests = queue.Queue()
+        self.generation = 0  # bumped by cancel(): older requests are dropped or cut short
+        self.thread = threading.Thread(target=self.speakLoop, name="Commentator", daemon=True)
+        self.thread.start()
 
-    def transition(self, t1, t2, cause):
+    def speakLoop(self):
+        voice = None
+        try:
+            import comtypes
+            import comtypes.client
+            comtypes.CoInitialize()  # SAPI is COM: the voice must be created and used on this thread
+            voice = comtypes.client.CreateObject("SAPI.SpVoice")
+            tokens = voice.GetVoices()
+            for i in range(tokens.Count):
+                if(VOICE in tokens.Item(i).GetDescription()):
+                    voice.Voice = tokens.Item(i)
+            voice.Rate = RATE
+        except Exception as e:
+            print("Text-to-speech unavailable, continuing silently:", e)
+        while True:
+            txt, generation, onDone = self.requests.get()
+            if(txt is None):
+                return
+            if(voice is not None and generation == self.generation):
+                try:
+                    voice.Speak(safe(txt), SVSF_ASYNC)
+                    purged = False
+                    while not(voice.WaitUntilDone(50)):
+                        if(generation != self.generation and not purged):
+                            voice.Speak("", SVSF_ASYNC | SVSF_PURGE)  # stops the current sentence
+                            purged = True
+                except Exception as e:
+                    print("Text-to-speech failed:", e)
+            if(onDone is not None):
+                onDone()
+
+    def cancel(self):
+        self.generation += 1
+
+    def transition(self, t1, t2, cause, onDone=None):
+        say = lambda txt: self.say(txt, onDone)
         if(cause == "album"):
-            self.say("We leave you with the title " + safe(t2['title'][0]) + " from the same album " + safe(t1['album'][0]))
+            say("We leave you with the title " + first(t2, 'title') + " from the same album " + first(t1, 'album'))
         elif(cause == "artist"):
-            self.say("We keep going with the same artist " + safe(t1['artist'][0]) + ", we listen to the title " + safe(t2['title'][0]))
+            say("We keep going with the same artist " + first(t1, 'artist') + ", we listen to the title " + first(t2, 'title'))
         elif (cause == "genre"):
-            if(safe(t1['album'][0]) == safe(t2['album'][0])):
-                self.say("Within the same ambience of the music " + str(safe(t1['genre'])) + ", we invite you to admire the title " + safe(t2['title'][0]))
-            elif(safe(t1['artist'][0]) == safe(t2['artist'][0])):
-                self.say("Within the same ambience of the artist " + safe(t2['artist'][0]) + ", and his music " + str(safe(t1['genre'])) + " we propose to you the title " + safe(t2['title'][0]))
+            if(first(t1, 'album') == first(t2, 'album')):
+                say("Within the same ambience of the music " + first(t1, 'genre') + ", we invite you to admire the title " + first(t2, 'title'))
+            elif(first(t1, 'artist') == first(t2, 'artist')):
+                say("Within the same ambience of the artist " + first(t2, 'artist') + ", and his music " + first(t1, 'genre') + " we propose to you the title " + first(t2, 'title'))
             else:
-                self.say("We continue with the same pace of music " + str(safe(t2['genre'])) + " we present for you the artist " + safe(t2['artist'][0]) + ", through his title " + safe(t2['title'][0]))
+                say("We continue with the same pace of music " + first(t2, 'genre') + " we present for you the artist " + first(t2, 'artist') + ", through his title " + first(t2, 'title'))
         elif (cause == "date"):
-            if (safe(t1['album'][0]) == safe(t2['album'][0])):
-                self.say("Another title from the same albume " + safe(t2['album'][0]) + ", of the year " + safe(t2['date'][0]) + ", we listen to the title " + safe(t2['title'][0]))
-            elif (safe(t1['artist'][0]) == safe(t2['artist'][0])):
-                self.say(safe(t2['date'][0]) + " was a rech year for the artist " + safe(t2['artist'][0]) + ", so listen with us to his title " + safe(t2['title'][0]) + " from the same year.")
+            if (first(t1, 'album') == first(t2, 'album')):
+                say("Another title from the same albume " + first(t2, 'album') + ", of the year " + first(t2, 'date') + ", we listen to the title " + first(t2, 'title'))
+            elif (first(t1, 'artist') == first(t2, 'artist')):
+                say(first(t2, 'date') + " was a rech year for the artist " + first(t2, 'artist') + ", so listen with us to his title " + first(t2, 'title') + " from the same year.")
             else:
-                self.say("We will stay in the ambience of the year " + safe(t2['date'][0]) + ", but with anothe artist, so allow us to present to you " + safe(t2['title'][0]) + " of " + safe(t2['artist'][0]))
+                say("We will stay in the ambience of the year " + first(t2, 'date') + ", but with anothe artist, so allow us to present to you " + first(t2, 'title') + " of " + first(t2, 'artist'))
+        elif (cause == "sound"):
+            say("Here is something that sounds alike: " + first(t2, 'title') + " by " + first(t2, 'artist'))
         else:
-            self.say("It is time to change, listen with use to " + safe(t2['title'][0]))
+            say("It is time to change, listen with use to " + first(t2, 'title'))
 
-    def say(self, txt):
+    def say(self, txt, onDone=None):
         self.Display(txt)
-        self.engine.say(safe(txt))
-        self.engine.runAndWait()
+        self.requests.put((txt, self.generation, onDone))
+
+    def shutdown(self):
+        self.cancel()
+        self.requests.put((None, None, None))
+        self.thread.join(timeout=2)
 
     def welcome(self, title = "", filter = ""):
         filtext = ""
@@ -61,7 +111,7 @@ class Commentator:
         self.say("welcome, " + filtext + " we will start our program with the track " + title)
 
     def Display(self, txt):
-        if isinstance(self.display, tkinter.Label):
-            self.display.text = txt
+        if callable(self.display):
+            self.display(txt)
         else:
             print(txt)

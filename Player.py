@@ -1,64 +1,57 @@
-import pygame
+import vlc
 import mutagen
-
-from FileSystem import getMp3Info
 
 
 class Player():
     def __init__(self):
-        pygame.mixer.init()
+        self.instance = vlc.Instance("--no-video", "--quiet")
+        if(self.instance is None):
+            raise RuntimeError("libVLC could not be loaded: install VLC (64-bit, same bitness as Python)")
+        self.mediaPlayer = self.instance.media_player_new()
+        self.volume = 100
         self.playing = None
 
     def play(self, song):
-        mp3 = mutagen.mp3.MP3(song)
-        v = self.getVolume()
-        pygame.mixer.quit()
-        pygame.mixer.init(frequency=mp3.info.sample_rate)
-        self.setVolume(v)
-        pygame.mixer.music.load(song)
-        mp3info = getMp3Info(song)
-        print(mp3info)
-        #print(mp3.info.sample_rate)
-        pygame.mixer.music.play() #frequency=mp3.info.sample_rate
-        self.playing = pygame.mixer.music.get_busy() == 1
-        self.mp3Length = mp3.info.length
-        return mp3info
-
-    def getImage(self, path):
-        print(path)
-        #print(mutagen.File(path))
-        print(mutagen.File(path)['APIC'])
-        return mutagen.File(path)['APIC'].data
-        '''tags = ID3(path)
-        pict = tags.get("APIC:").data
-        im = Image.open(BytesIO(pict))
-        print('Picture size : ' + str(im.size))'''
+        self.mediaPlayer.set_media(self.instance.media_new_path(song))
+        self.mediaPlayer.play()
+        self.mediaPlayer.audio_set_volume(self.volume)
+        self.playing = True
+        self.trackLength = mutagen.File(song).info.length  # until VLC knows the exact one
 
     def pause(self):
-        pygame.mixer.music.pause()
+        self.mediaPlayer.set_pause(1)
         self.playing = False
 
     def resume(self):
-        pygame.mixer.music.unpause()
+        self.mediaPlayer.set_pause(0)
         self.playing = True
 
     def stop(self):
-        pygame.mixer.music.stop()
+        self.mediaPlayer.stop()
         self.playing = None
 
     def isTrackEnded(self):
-        return not pygame.mixer.music.get_busy()
+        return self.mediaPlayer.get_state() in (vlc.State.Ended, vlc.State.Error)
 
+    # Volume is 0-100, like the UI slider.
     def getVolume(self):
-        return pygame.mixer.music.get_volume()*100
+        return self.volume
 
     def setVolume(self, v):
-        pygame.mixer.music.set_volume(v)
+        self.volume = int(v)
+        self.mediaPlayer.audio_set_volume(self.volume)
 
     def getPos(self):
-        return pygame.mixer.music.get_pos()/1000
+        return max(self.mediaPlayer.get_time(), 0)/1000
+
+    # Called periodically while playing: picks up the decoded duration and
+    # re-applies the volume if the audio output started after it was set.
+    def refresh(self):
+        length = self.mediaPlayer.get_length()
+        if(length > 0):
+            self.trackLength = length/1000
+        if(self.mediaPlayer.audio_get_volume() not in (-1, self.volume)):
+            self.mediaPlayer.audio_set_volume(self.volume)
 
     def setPos(self, v):
-        '''pygame.mixer.music.stop()
-        pygame.mixer.music.set_pos(v)
-        pygame.mixer.music.play(0, v)'''
+        self.mediaPlayer.set_time(int(v*1000))

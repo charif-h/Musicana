@@ -27,3 +27,7 @@ image.jpg
 
 # Environment variables
 .env
+
+# Python Environment
+env-mus
+env-mus/*
