@@ -1,6 +1,7 @@
 from tkinter import *  # for UI
 from mutagen import File
 from PIL import ImageTk, Image
+from io import BytesIO
 
 import ImageColorExtract
 import Nexter_RandomWalk
@@ -181,11 +182,8 @@ class Application(Frame):
         file = File(track)
         if('APIC:' in file.tags.keys()):
             artwork = file.tags['APIC:'].data  # access APIC frame and grab the image
-            with open('image.jpg', 'wb') as img:
-                img.write(artwork)
-            img.close()
-            self.original = Image.open("image.jpg")
-            self.fitted = self.original.resize((300, 300),Image.ANTIALIAS)
+            self.original = Image.open(BytesIO(artwork))
+            self.fitted = self.original.resize((300, 300),Image.LANCZOS)
             self.imge = ImageTk.PhotoImage(self.fitted)  # PhotoImage(file="image.jpg")
             #image1 = PhotoImage(file="image.jpg")
             panel = Label(self.frm_image, image = self.imge, width=300, height=300)
