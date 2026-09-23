@@ -1,16 +1,26 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (QAbstractSlider, QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
                                QPushButton, QSlider, QStyle, QTableView, QVBoxLayout, QWidget)
 
+import FileSystem
+
 ART_SIZE = 200
+MAIN_TAGS = ("title", "artist", "album", "genre", "date")
 
 def formatTime(seconds):
     seconds = int(seconds)
     return str(seconds // 60) + ":" + str(seconds % 60).zfill(2)
 
+def mkString(values, sep=" / "):
+    return sep.join(values)
+
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, session, player, commentator):
         super().__init__()
+        self.session = session
+        self.player = player
+        self.commentator = commentator
         self.setWindowTitle("Musicana")
         self.resize(960, 720)
         central = QWidget()
@@ -34,6 +44,7 @@ class MainWindow(QMainWindow):
         self.btn_random = QPushButton(self.icon(QStyle.SP_BrowserReload), "Random")
         self.lbl_pos = QLabel(formatTime(0))
         self.sld_time = QSlider(Qt.Horizontal)
+        self.sld_time.setPageStep(10)
         self.lbl_length = QLabel(formatTime(0))
         lbl_volume = QLabel()
         lbl_volume.setPixmap(self.icon(QStyle.SP_MediaVolume).pixmap(16, 16))
@@ -78,11 +89,117 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage("on the way…")
 
+        # Polled rather than using VLC events: those fire on a VLC thread, and Qt widgets are not thread-safe.
+        self.clock = QTimer(self)
+        self.clock.setInterval(1000)
+        self.clock.timeout.connect(self.updateClock)
+        self.seeking = False
+
+        self.commentator.display = self.showStatus
+        self.inp_find.returnPressed.connect(self.findTrack)
+        self.btn_find.clicked.connect(self.findTrack)
+        self.btn_play.clicked.connect(self.play)
+        self.btn_next.clicked.connect(self.next)
+        self.btn_random.clicked.connect(self.randomTrack)
+        self.sld_time.sliderPressed.connect(self.startSeek)
+        self.sld_time.sliderMoved.connect(lambda v: self.lbl_pos.setText(formatTime(v)))
+        self.sld_time.sliderReleased.connect(self.seek)
+        self.sld_time.actionTriggered.connect(self.timeSliderAction)
+        self.sld_volume.setValue(self.player.getVolume())
+        self.sld_volume.valueChanged.connect(self.player.setVolume)
+
     def icon(self, standardPixmap):
         return self.style().standardIcon(standardPixmap)
 
-if __name__ == '__main__':
-    app = QApplication([])
-    window = MainWindow()
-    window.show()
-    app.exec()
+    # Shown before the Commentator starts speaking, which blocks the UI until it is done.
+    def showStatus(self, txt):
+        self.statusBar().showMessage(txt)
+        self.statusBar().repaint()
+
+    def findTrack(self):
+        filter = self.inp_find.text()
+        if(self.session.start(filter) is None):
+            self.showStatus("No track matches '" + filter + "'")
+            return
+        self.playCurrent()
+
+    def playCurrent(self):
+        self.player.playing = None
+        self.play()
+
+    def play(self):
+        if(self.session.current is None):
+            self.showStatus("No audio files found in the music folder")
+            return
+        if(self.player.playing is None):
+            self.player.play(self.session.current)
+            self.showTrack(self.session.current)
+            self.sld_time.setValue(0)
+        elif(self.player.playing):
+            self.player.pause()
+        else:
+            self.player.resume()
+        if(self.player.playing):
+            self.btn_play.setIcon(self.icon(QStyle.SP_MediaPause))
+            self.btn_play.setText("Pause")
+            self.clock.start()
+        else:
+            self.btn_play.setIcon(self.icon(QStyle.SP_MediaPlay))
+            self.btn_play.setText("Play")
+            self.clock.stop()
+        self.updateClock()
+
+    def next(self):
+        self.session.next()
+        self.playCurrent()
+
+    def randomTrack(self):
+        self.session.random()
+        self.playCurrent()
+
+    def showTrack(self, track):
+        tags = self.session.tracks[track]
+        get = lambda k: mkString(tags.get(k, []))
+        self.lbl_title.setText(get("title"))
+        self.lbl_artistAlbum.setText(" — ".join(v for v in (get("artist"), get("album")) if v))
+        self.lbl_genreDate.setText(" · ".join(v for v in (get("genre"), get("date")) if v))
+        self.lbl_otherTags.setText("   ".join(k + ": " + get(k) for k in sorted(tags) if k not in MAIN_TAGS))
+        pixmap = QPixmap()
+        artwork = FileSystem.getArtwork(track)
+        if(artwork is not None and pixmap.loadFromData(artwork)):
+            self.lbl_art.setPixmap(pixmap.scaled(ART_SIZE, ART_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.lbl_art.setPixmap(QPixmap())
+            self.lbl_art.setText("♪")
+
+    def updateClock(self):
+        if(self.player.playing):
+            self.player.refresh()
+            length = int(self.player.trackLength)
+            if(self.sld_time.maximum() != length):
+                self.sld_time.setMaximum(length)
+                self.lbl_length.setText(formatTime(length))
+            if not(self.seeking):
+                self.sld_time.setValue(int(self.player.getPos()))
+                self.lbl_pos.setText(formatTime(self.player.getPos()))
+        if(self.player.isTrackEnded()):
+            print("song ended")
+            self.next()
+
+    def startSeek(self):
+        self.seeking = True
+
+    def seek(self):
+        self.seeking = False
+        self.player.setPos(self.sld_time.value())
+        self.lbl_pos.setText(formatTime(self.sld_time.value()))
+
+    # Clicks on the groove and arrow keys move the slider without press/release: seek once the value is applied.
+    def timeSliderAction(self, action):
+        if(action not in (QAbstractSlider.SliderMove, QAbstractSlider.SliderNoAction)):
+            QTimer.singleShot(0, self.seek)
+
+    def closeEvent(self, event):
+        self.clock.stop()
+        self.player.stop()
+        super().closeEvent(event)

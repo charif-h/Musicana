@@ -26,6 +26,10 @@ class Player():
         self.mediaPlayer.set_pause(0)
         self.playing = True
 
+    def stop(self):
+        self.mediaPlayer.stop()
+        self.playing = None
+
     def isTrackEnded(self):
         return self.mediaPlayer.get_state() in (vlc.State.Ended, vlc.State.Error)
 

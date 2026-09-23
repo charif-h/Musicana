@@ -64,7 +64,9 @@ class Commentator:
         self.say("welcome, " + filtext + " we will start our program with the track " + title)
 
     def Display(self, txt):
-        if isinstance(self.display, tkinter.Label):
+        if callable(self.display):
+            self.display(txt)
+        elif isinstance(self.display, tkinter.Label):
             self.display.configure(text=txt)
         else:
             print(txt)
