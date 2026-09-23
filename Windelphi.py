@@ -4,12 +4,10 @@ from PIL import ImageTk, Image
 from io import BytesIO
 
 import ImageColorExtract
-import Nexter_RandomWalk
 import Player
 import FileSystem
 import Comentateur
-import random
-import queue
+import Session
 #from tkinter.ttk import *
 
 def intToTimeText(i):
@@ -25,12 +23,11 @@ class Application(Frame):
         #self.root.minsize(300,300) # set size as 300 x 300 wide, Change this accordingly
         self.commentateur = Comentateur.Commentator()
 
-        self.tracks = FileSystem.getAllMp3(musicPath)
+        self.session = Session.PlayerSession(FileSystem.getAllMp3(musicPath), self.commentateur)
         self.player = Player.Player()
         self.commentateur.say("Hello, Any filter to start from? : ")
-        self.titles = self.getTracksKeys(self.tracks)
-        self.track = random.choice(list(self.tracks))
-        self.banned = queue.Queue(maxsize=20)
+        self.titles = self.getTracksKeys(self.session.tracks)
+        self.session.start()
         self.bgColor = "white"
         self.fgColor = "black"
 
@@ -115,21 +112,22 @@ class Application(Frame):
         return keys
 
     def findTrack(self):
-        filtered_tracks = FileSystem.filterTracks(self.tracks, self.inp_find.get()).keys()
-        self.track = random.choice(list(filtered_tracks))
-        self.player.playing = None
-        self.play()
+        self.session.start(self.inp_find.get())
+        self.playCurrent()
 
     def findTrackKey(self, event):
         self.findTrack()
 
+    def playCurrent(self):
+        self.player.playing = None
+        self.play()
+
     def play(self):
-        self.add2queue(self.track)
         if(self.player.playing is None):
             self.btn_play["text"] = "stop"
             self.scl_time.set(value=0)
             self.scl_son.set(value=self.player.getVolume())
-            info = self.player.play(self.track)
+            info = self.player.play(self.session.current)
             self.displayTrackInfo(info)
             self.scl_time.configure(to=self.player.mp3Length)
             self.lbl_trackLength.configure(text= intToTimeText(int(self.player.mp3Length)))
@@ -150,7 +148,7 @@ class Application(Frame):
         self.frm_track.destroy()
         self.frm_track = Frame(self.root, height=300)
         self.frm_track.pack(side=TOP, fill='x')
-        self.getImage(self.track)
+        self.getImage(self.session.current)
         self.frm_track.configure(bg = self.bgColor)
         self.frm_track_info.destroy()
         self.frm_track_info = Frame(self.frm_track, height=300, bg=self.bgColor)
@@ -237,11 +235,6 @@ class Application(Frame):
     def setVolume(self, event):
         self.player.setVolume(int(self.scl_son.get())/100)
 
-    def add2queue(self, track):
-        if (self.banned.full()):
-            self.banned.get()
-        self.banned.put(track)
-
     def mkString(self, List, sep=" / "):
         s = ""
         for l in List:
@@ -249,15 +242,9 @@ class Application(Frame):
         return s[:-3]
 
     def randomTrack(self):
-        previous = self.track
-        self.track, cause = Nexter_RandomWalk.nextIsRandom(self.tracks)
-        self.commentateur.transition(self.tracks[previous], self.tracks[self.track], cause)
-        self.player.playing = None
-        self.play()
+        self.session.random()
+        self.playCurrent()
 
     def next(self):
-        previous = self.track
-        self.track, cause = Nexter_RandomWalk.next(self.tracks, self.track, list(self.banned.queue))
-        self.commentateur.transition(self.tracks[previous], self.tracks[self.track], cause)
-        self.player.playing = None
-        self.play()
+        self.session.next()
+        self.playCurrent()
