@@ -1,7 +1,7 @@
 import os
 import json
 
-DEFAULTS = {"volume": 100, "windowGeometry": None, "tableHeader": None}
+DEFAULTS = {"musicPath": None, "volume": 100, "windowGeometry": None, "tableHeader": None}
 
 def appDataDir():
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")

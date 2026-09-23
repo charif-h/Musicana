@@ -1,4 +1,5 @@
 import sys
+from dotenv import load_dotenv
 from PySide6.QtWidgets import QApplication
 
 import Comentateur
@@ -7,10 +8,8 @@ import Settings
 import Theme
 from MainWindow import MainWindow
 
-# Root folder scanned recursively for audio files (see FileSystem.AUDIO_EXTENSIONS).
-MUSIC_PATH = 'C:\\Users\\chari\\Documents\\D\\Music/'
-
 if __name__ == '__main__':
+    load_dotenv()  # lets a .env file next to the code set MUSICANA_MUSIC_PATH
     app = QApplication(sys.argv)
     Theme.apply(app)
     settings = Settings.load()
@@ -18,6 +17,10 @@ if __name__ == '__main__':
     player = Player.Player()
     window = MainWindow(player, commentator, settings)
     window.show()
-    window.loadLibrary(MUSIC_PATH)
+    musicPath = window.initialMusicFolder()
+    if(musicPath is None):
+        window.showStatus("No music folder chosen: use File > Change music folder…")
+    else:
+        window.loadLibrary(musicPath)
     commentator.say("Hello, Any filter to start from? : ")
     sys.exit(app.exec())

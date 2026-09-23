@@ -1,8 +1,10 @@
+import os
+
 from PySide6.QtCore import QByteArray, QItemSelectionModel, Qt, QTimer
-from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPalette, QPixmap
-from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFrame, QHBoxLayout, QHeaderView,
-                               QLabel, QLineEdit, QMainWindow, QProgressBar, QPushButton, QSlider, QStyle,
-                               QTableView, QVBoxLayout, QWidget)
+from PySide6.QtGui import QGuiApplication, QIcon, QKeySequence, QPainter, QPalette, QPixmap
+from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFileDialog, QFrame, QHBoxLayout,
+                               QHeaderView, QLabel, QLineEdit, QMainWindow, QProgressBar, QPushButton, QSlider,
+                               QStyle, QTableView, QVBoxLayout, QWidget)
 
 import FileSystem
 import Session
@@ -12,6 +14,7 @@ from LibraryScanner import LibraryScanner
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
 ART_SIZE = 200
+MUSIC_PATH_VARIABLE = "MUSICANA_MUSIC_PATH"
 MAIN_TAGS = ("title", "artist", "album", "genre", "date")
 
 def formatTime(seconds):
@@ -31,6 +34,11 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self.setWindowTitle("Musicana")
         self.resize(960, 720)
+        fileMenu = self.menuBar().addMenu("&File")
+        fileMenu.addAction("Change &music folder…", QKeySequence.Open, self.changeMusicFolder)
+        fileMenu.addSeparator()
+        fileMenu.addAction("&Quit", QKeySequence("Ctrl+Q"), self.close)
+
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
@@ -173,6 +181,35 @@ class MainWindow(QMainWindow):
     def showStatus(self, txt):
         self.statusBar().showMessage(txt)
         self.statusBar().repaint()
+
+    # MUSICANA_MUSIC_PATH (environment or .env), else the folder saved in the settings, else ask once.
+    def initialMusicFolder(self):
+        fromEnvironment = os.environ.get(MUSIC_PATH_VARIABLE)
+        if(fromEnvironment):
+            if(os.path.isdir(fromEnvironment)):
+                return fromEnvironment
+            print(MUSIC_PATH_VARIABLE, "is not a folder:", fromEnvironment)
+        if(self.settings["musicPath"] and os.path.isdir(self.settings["musicPath"])):
+            return self.settings["musicPath"]
+        return self.chooseMusicFolder()
+
+    # Returns the chosen folder (remembered in the settings), or None if the dialog was cancelled.
+    def chooseMusicFolder(self):
+        start = self.settings["musicPath"] or os.path.join(os.path.expanduser("~"), "Music")
+        path = QFileDialog.getExistingDirectory(self, "Choose your music folder", start)
+        if not(path):
+            return None
+        self.settings["musicPath"] = path
+        Settings.save(self.settings)
+        return path
+
+    def changeMusicFolder(self):
+        path = self.chooseMusicFolder()
+        if(path is None):
+            return
+        self.loadLibrary(path)
+        if(os.environ.get(MUSIC_PATH_VARIABLE)):
+            self.showStatus("Note: " + MUSIC_PATH_VARIABLE + " is set and will be used again at the next start")
 
     # The window stays usable while the scan runs on a background thread.
     def loadLibrary(self, path):

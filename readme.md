@@ -8,7 +8,7 @@ Root folder with subfolders getallMp3
 
 Playback uses [VLC](https://www.videolan.org/vlc/): install it first (64-bit if your Python is 64-bit), then `pip install -r requirements.txt`.
 
-Set `MUSIC_PATH` in `main.py` to your music root folder, then start the Tkinter GUI with:
+Choose your music root folder: either set `MUSICANA_MUSIC_PATH` (in the environment, or in a `.env` file copied from `.env.example`), or just start the app and pick the folder when asked; it is remembered, and can be changed with *File > Change music folder…*. Then start the GUI with:
 
 ```
 python main.py
@@ -17,6 +17,7 @@ python main.py
 `main.py` is the only entry point; the PySide6 GUI itself lives in `MainWindow.py` (library table in `TrackTableModel.py`, light/dark theme in `Theme.py`).
 
 Scanned tags are cached in `%LOCALAPPDATA%\Musicana\cache.json`, so later launches only re-read new or changed files. Delete that file to force a full rescan.
+Settings (music folder, volume, window size, table columns and sort) are kept in `%LOCALAPPDATA%\Musicana\settings.json`.
 
 **つづく**
 
