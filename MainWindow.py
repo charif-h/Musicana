@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QItemSelectionModel, Qt, QTimer
 from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFrame, QHBoxLayout, QHeaderView,
                                QLabel, QLineEdit, QMainWindow, QPushButton, QSlider, QStyle, QTableView,
@@ -178,6 +178,19 @@ class MainWindow(QMainWindow):
         self.session.select(index.data(PATH_ROLE))
         self.playCurrent()
 
+    # Selects the playing track's row and scrolls to it, centered, unless it is already on screen
+    # (or hidden by the current search).
+    def revealCurrent(self):
+        row = self.trackModel.rows.get(self.session.current)
+        if(row is None):
+            return
+        index = self.trackProxy.mapFromSource(self.trackModel.index(row, 0))
+        if not(index.isValid()):
+            return
+        self.tbl_tracks.selectionModel().setCurrentIndex(index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+        if not(self.tbl_tracks.viewport().rect().contains(self.tbl_tracks.visualRect(index))):
+            self.tbl_tracks.scrollTo(index, QAbstractItemView.PositionAtCenter)
+
     def playCurrent(self):
         self.player.playing = None
         self.play()
@@ -190,6 +203,7 @@ class MainWindow(QMainWindow):
             self.player.play(self.session.current)
             self.showTrack(self.session.current)
             self.trackModel.setCurrent(self.session.current)
+            self.revealCurrent()
             self.sld_time.setValue(0)
         elif(self.player.playing):
             self.player.pause()
