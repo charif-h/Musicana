@@ -1,13 +1,17 @@
 import os
 import base64
 import mutagen
+from mutagen.asf import ASF
 from mutagen.easyid3 import EasyID3
 from mutagen.flac import Picture
 
 import TrackCache
 
-# Formats pygame.mixer can play; m4a/wma wait for the VLC backend (M3).
-AUDIO_EXTENSIONS = ('.mp3', '.flac', '.ogg', '.wav')
+AUDIO_EXTENSIONS = ('.mp3', '.flac', '.ogg', '.wav', '.m4a', '.wma')
+
+# WMA has no easy tag mode: map its attribute names to the easy ones.
+ASF_KEYS = {"Title": "title", "Author": "artist", "WM/AlbumTitle": "album", "WM/AlbumArtist": "albumartist",
+            "WM/Genre": "genre", "WM/Year": "date", "WM/Composer": "composer", "WM/TrackNumber": "tracknumber"}
 
 EasyID3.RegisterTextKey('comment', 'COMM')
 
@@ -80,6 +84,11 @@ def getTrackInfo(fileName):
         symbols = ["/", ",", "&", " ;", "; "]
         for f in audio.tags.keys():
             values = audio.tags[f]
+            if(isinstance(audio, ASF)):
+                if(f not in ASF_KEYS):
+                    continue
+                values = [str(v) for v in values]
+                f = ASF_KEYS[f]
             if not(isinstance(values, list) and all(isinstance(v, str) for v in values)):
                 continue  # raw frames (e.g. ID3 in WAV) have no easy text form
             txt = ";".join(values).lower()
@@ -104,8 +113,21 @@ def getArtwork(fileName):
     if(hasattr(tags, "getall")):  # ID3
         apic = tags.getall("APIC")
         return apic[0].data if apic else None
+    if(isinstance(audio, ASF)):
+        pics = tags.get("WM/Picture")
+        return asfPictureData(pics[0].value) if pics else None
     if("covr" in tags):  # MP4
         return bytes(tags["covr"][0])
     if("metadata_block_picture" in tags):  # Ogg
         return Picture(base64.b64decode(tags["metadata_block_picture"][0])).data
     return None
+
+# WM/Picture: type byte, data length (4), mime and description as UTF-16 zero-terminated, then data.
+def asfPictureData(value):
+    pos = 5
+    for _ in range(2):
+        end = pos
+        while value[end:end + 2] != b"\x00\x00":
+            end += 2
+        pos = end + 2
+    return value[pos:]
