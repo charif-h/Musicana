@@ -3,12 +3,10 @@ from mutagen import File
 from PIL import ImageTk, Image
 from io import BytesIO
 
-import ImageColorExtract
 import Player
 import FileSystem
 import Comentateur
 import Session
-#from tkinter.ttk import *
 
 def intToTimeText(i):
     if(i < 60):
@@ -20,13 +18,11 @@ class Application(Frame):
 
     def __init__(self, musicPath):
         self.root = Tk() # creates an Empty window
-        #self.root.minsize(300,300) # set size as 300 x 300 wide, Change this accordingly
         self.commentateur = Comentateur.Commentator()
 
         self.session = Session.PlayerSession(FileSystem.getAllMp3(musicPath), self.commentateur)
         self.player = Player.Player()
         self.commentateur.say("Hello, Any filter to start from? : ")
-        self.titles = self.getTracksKeys(self.session.tracks)
         self.session.start()
         self.bgColor = "white"
         self.fgColor = "black"
@@ -42,15 +38,12 @@ class Application(Frame):
         self.inp_find = Entry(frm_search_bar, bd=2, width=50)
         self.inp_find.pack(side=LEFT, fill='x')
         self.inp_find.bind('<Return>', self.findTrackKey)
-        #self.inp_find.set("childhood")
         btn_find = Button(frm_search_bar, text='filter', command=self.findTrack)
         btn_find.pack(side=RIGHT)
 
         # playser
         frm_player = Frame(self.root)
         frm_player.pack(side='top', fill='x', padx=2, pady=1, expand=True)
-        #btn_back = Button(frm_player, text='b')
-        #btn_back.pack(side='left')
 
         self.btn_play = Button(frm_player, text='play', command=self.play)
         self.btn_play.pack(side='left')
@@ -85,31 +78,9 @@ class Application(Frame):
         self.statusbar = Label(self.root, text="on the way…", bd=1, relief=SUNKEN, anchor=W)
         self.statusbar.pack(side=BOTTOM, fill=X)
         self.commentateur.display = self.statusbar
-        # table
-        '''frm_table = Frame(self.root, width=300, height=50, bg='grey')
-        frm_table.pack(side='bottom', fill='both', padx=10, pady=5, expand=True)
-        height = len(self.tracks) + 1
-        width = len(self.titles)
-        for i in range(height):  # Rows
-            for j in range(width):  # Columns
-                txt = ""
-                if(i == 0):
-                    txt = self.titles[j]
-                else:
-                    txt = self.tracks[i - 1]
-                b = Label(frm_table, text=txt)
-                b.grid(row=i, column=j)'''
 
     def run(self):
         self.root.mainloop()
-
-    def getTracksKeys(self, tracks):
-        keys = []
-        for track in tracks.values():
-            for k in track.keys():
-                if not(k in keys):
-                    keys.append(k)
-        return keys
 
     def findTrack(self):
         self.session.start(self.inp_find.get())
@@ -183,8 +154,7 @@ class Application(Frame):
             artwork = file.tags['APIC:'].data  # access APIC frame and grab the image
             self.original = Image.open(BytesIO(artwork))
             self.fitted = self.original.resize((300, 300),Image.LANCZOS)
-            self.imge = ImageTk.PhotoImage(self.fitted)  # PhotoImage(file="image.jpg")
-            #image1 = PhotoImage(file="image.jpg")
+            self.imge = ImageTk.PhotoImage(self.fitted)
             panel = Label(self.frm_image, image = self.imge, width=300, height=300)
             panel.pack(side = "bottom", fill = "both", expand = "yes")
 
@@ -203,23 +173,9 @@ class Application(Frame):
 
             self.bgColor = '#%02x%02x%02x' % (R//sum, G//sum, B//sum)
             self.fgColor = '#%02x%02x%02x' % (((R // sum) + 127)%255, ((G // sum) + 127)%255, ((B // sum) + 127)%255)
-            '''dict = ImageColorExtract.image_histogram(self.fitted)
-            print(dict)
-            self.bgColor = list(dict.keys())[0]
-            self.fgColor = list(dict.keys())[1]
-            print(self.bgColor + " " + self.fgColor)'''
-
-
-
-        #canvas.create_image(20, 20, anchor=NW, image=imge)
-        #image = Label(self.frm_track_info, image = img)
-        #image.grid(row=0, column=0)
-
 
     def update_clock(self):
         if(self.player.playing):
-            #val = int(self.scl_time.get()) + 1
-            #self.scl_time.set(value=val)
             self.scl_time.set(value=self.player.getPos())
             self.root.after(1000, self.update_clock)
         if(self.player.isTrackEnded()):
@@ -228,9 +184,7 @@ class Application(Frame):
             self.next()
 
     def setPos(self, event):
-        #if(self.player.getPos() != int(self.scl_time.get())*1000):
         self.player.setPos(int(self.scl_time.get()))
-
 
     def setVolume(self, event):
         self.player.setVolume(int(self.scl_son.get())/100)
