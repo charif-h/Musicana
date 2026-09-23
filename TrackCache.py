@@ -1,12 +1,13 @@
 import os
 import json
 
+import Settings
+
 # Bump when the stored tag format changes, so old caches are rebuilt.
 CACHE_VERSION = 1
 
 def defaultPath():
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    return os.path.join(base, "Musicana", "cache.json")
+    return os.path.join(Settings.appDataDir(), "cache.json")
 
 # Returns {path: {"mtime": ns, "size": bytes, "tags": {...}}}, or {} if missing/unreadable.
 def load(cachePath):

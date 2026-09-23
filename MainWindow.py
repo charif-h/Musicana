@@ -1,10 +1,11 @@
-from PySide6.QtCore import QItemSelectionModel, Qt, QTimer
+from PySide6.QtCore import QByteArray, QItemSelectionModel, Qt, QTimer
 from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFrame, QHBoxLayout, QHeaderView,
                                QLabel, QLineEdit, QMainWindow, QPushButton, QSlider, QStyle, QTableView,
                                QVBoxLayout, QWidget)
 
 import FileSystem
+import Settings
 import Theme
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
@@ -19,11 +20,12 @@ def mkString(values, sep=" / "):
     return sep.join(values)
 
 class MainWindow(QMainWindow):
-    def __init__(self, session, player, commentator):
+    def __init__(self, session, player, commentator, settings):
         super().__init__()
         self.session = session
         self.player = player
         self.commentator = commentator
+        self.settings = settings
         self.setWindowTitle("Musicana")
         self.resize(960, 720)
         central = QWidget()
@@ -91,8 +93,6 @@ class MainWindow(QMainWindow):
         self.trackProxy.setSourceModel(self.trackModel)
         self.tbl_tracks = QTableView()
         self.tbl_tracks.setModel(self.trackProxy)
-        self.tbl_tracks.horizontalHeader().setSortIndicator(1, Qt.AscendingOrder)
-        self.tbl_tracks.setSortingEnabled(True)
         self.tbl_tracks.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tbl_tracks.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tbl_tracks.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -105,6 +105,10 @@ class MainWindow(QMainWindow):
         for column, width in enumerate((280, 180, 200, 120)):
             header.resizeSection(column, width)
         header.setStretchLastSection(True)
+        header.setSortIndicator(1, Qt.AscendingOrder)
+        if(settings["tableHeader"]):  # column widths and sort column/order
+            header.restoreState(QByteArray.fromBase64(settings["tableHeader"].encode()))
+        self.tbl_tracks.setSortingEnabled(True)  # sorts once, by the restored indicator
         layout.addWidget(self.tbl_tracks, 1)
 
         self.lbl_count = QLabel()
@@ -130,7 +134,10 @@ class MainWindow(QMainWindow):
         self.sld_time.sliderMoved.connect(lambda v: self.lbl_pos.setText(formatTime(v)))
         self.sld_time.sliderReleased.connect(self.seek)
         self.sld_time.actionTriggered.connect(self.timeSliderAction)
+        self.player.setVolume(settings["volume"])
         self.sld_volume.setValue(self.player.getVolume())
+        if(settings["windowGeometry"]):
+            self.restoreGeometry(QByteArray.fromBase64(settings["windowGeometry"].encode()))
         self.sld_volume.valueChanged.connect(self.player.setVolume)
         QGuiApplication.styleHints().colorSchemeChanged.connect(self.colorSchemeChanged)
         self.artImage = None
@@ -277,4 +284,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.clock.stop()
         self.player.stop()
+        self.settings["volume"] = self.player.getVolume()
+        self.settings["windowGeometry"] = self.saveGeometry().toBase64().data().decode()
+        self.settings["tableHeader"] = self.tbl_tracks.horizontalHeader().saveState().toBase64().data().decode()
+        Settings.save(self.settings)
         super().closeEvent(event)
