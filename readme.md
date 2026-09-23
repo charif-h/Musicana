@@ -19,6 +19,17 @@ python main.py
 Scanned tags are cached in `%LOCALAPPDATA%\Musicana\cache.json`, so later launches only re-read new or changed files. Delete that file to force a full rescan.
 Settings (music folder, volume, window size, table columns and sort) are kept in `%LOCALAPPDATA%\Musicana\settings.json`.
 
+## Recommendation agents
+The *Agent* menu chooses how the next track is picked (the choice is remembered):
+- **Random walk** (default): jumps to a track sharing something with the current one: album, artist, genre, year…
+- **Shuffle**: any track that was not played recently.
+- **Album journey**: plays the current album through in track order, then moves to a related album from its first track.
+- **Genre explorer**: stays in the current genre, drifting now and then via the artist or the year.
+- **Era explorer**: stays in the current decade, preferring another artist each time.
+- **Sound-alike**: picks among the 10 tracks that *sound* most like the current one. Each track gets an audio vector (timbre, harmony, spectral contrast, brightness, loudness, tempo) computed from 30 s of its audio; this runs once in the background while the agent is selected, and the vectors are stored in the metadata cache.
+
+New agents implement `Agents.RecommendationAgent.next(tracks, current, history) -> (track, cause)` and are listed in `Agents.AGENTS`.
+
 **つづく**
 
 # TODO

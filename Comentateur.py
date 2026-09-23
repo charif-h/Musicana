@@ -90,6 +90,8 @@ class Commentator:
                 say(first(t2, 'date') + " was a rech year for the artist " + first(t2, 'artist') + ", so listen with us to his title " + first(t2, 'title') + " from the same year.")
             else:
                 say("We will stay in the ambience of the year " + first(t2, 'date') + ", but with anothe artist, so allow us to present to you " + first(t2, 'title') + " of " + first(t2, 'artist'))
+        elif (cause == "sound"):
+            say("Here is something that sounds alike: " + first(t2, 'title') + " by " + first(t2, 'artist'))
         else:
             say("It is time to change, listen with use to " + first(t2, 'title'))
 

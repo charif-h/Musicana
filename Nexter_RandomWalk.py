@@ -57,18 +57,20 @@ class TrackFilter():
     def __str__(self):
         return self.feature + "." + self.groupBy
 
-def next(tracks, track, history):
-    features = [ TrackFilter("date"),
-          TrackFilter("album"), TrackFilter("album"),
-          TrackFilter("artist"), TrackFilter("composer"),
-          TrackFilter("artist", "album"),
-          TrackFilter("artist", "date"),
-          TrackFilter("genre"),
-          TrackFilter("genre", "album"),
-          TrackFilter("genre", "artist"),
-          TrackFilter("genre", "date"),
-    ]
-    feature = random.choice(features)
+# The feature linking two tracks is drawn with these weights (album used to be listed twice).
+FEATURES = [TrackFilter("date"),
+            TrackFilter("album", weight=2),
+            TrackFilter("artist"), TrackFilter("composer"),
+            TrackFilter("artist", "album"),
+            TrackFilter("artist", "date"),
+            TrackFilter("genre"),
+            TrackFilter("genre", "album"),
+            TrackFilter("genre", "artist"),
+            TrackFilter("genre", "date"),
+]
+
+def next(tracks, track, history, features=FEATURES):
+    feature = random.choices(features, weights=[f.weight for f in features])[0]
     print(feature, end=" ")
     if(track is None):
         print(feature, "is none")

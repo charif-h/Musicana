@@ -3,3 +3,6 @@ python-vlc==3.0.21203
 comtypes==1.4.17
 python-dotenv==1.2.1
 PySide6-Essentials==6.11.2
+numpy==2.4.6
+librosa==0.11.0
+av==18.1.0
