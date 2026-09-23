@@ -2,9 +2,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 import Comentateur
-import FileSystem
 import Player
-import Session
 import Settings
 import Theme
 from MainWindow import MainWindow
@@ -17,10 +15,9 @@ if __name__ == '__main__':
     Theme.apply(app)
     settings = Settings.load()
     commentator = Comentateur.Commentator()
-    session = Session.PlayerSession(FileSystem.getAllTracks(MUSIC_PATH), commentator)
     player = Player.Player()
-    commentator.say("Hello, Any filter to start from? : ")
-    session.start()
-    window = MainWindow(session, player, commentator, settings)
+    window = MainWindow(player, commentator, settings)
     window.show()
+    window.loadLibrary(MUSIC_PATH)
+    commentator.say("Hello, Any filter to start from? : ")
     sys.exit(app.exec())

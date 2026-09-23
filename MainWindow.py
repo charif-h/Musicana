@@ -1,12 +1,14 @@
 from PySide6.QtCore import QByteArray, QItemSelectionModel, Qt, QTimer
 from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFrame, QHBoxLayout, QHeaderView,
-                               QLabel, QLineEdit, QMainWindow, QPushButton, QSlider, QStyle, QTableView,
-                               QVBoxLayout, QWidget)
+                               QLabel, QLineEdit, QMainWindow, QProgressBar, QPushButton, QSlider, QStyle,
+                               QTableView, QVBoxLayout, QWidget)
 
 import FileSystem
+import Session
 import Settings
 import Theme
+from LibraryScanner import LibraryScanner
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
 ART_SIZE = 200
@@ -20,9 +22,10 @@ def mkString(values, sep=" / "):
     return sep.join(values)
 
 class MainWindow(QMainWindow):
-    def __init__(self, session, player, commentator, settings):
+    def __init__(self, player, commentator, settings):
         super().__init__()
-        self.session = session
+        self.session = Session.PlayerSession({}, commentator)  # until loadLibrary()/setLibrary()
+        self.scanner = None
         self.player = player
         self.commentator = commentator
         self.settings = settings
@@ -88,7 +91,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.frm_nowPlaying)
 
         # library
-        self.trackModel = TrackTableModel(self.session.tracks, self)
+        self.trackModel = TrackTableModel({}, self)
         self.trackProxy = TrackFilterProxy(self)
         self.trackProxy.setSourceModel(self.trackModel)
         self.tbl_tracks = QTableView()
@@ -111,6 +114,11 @@ class MainWindow(QMainWindow):
         self.tbl_tracks.setSortingEnabled(True)  # sorts once, by the restored indicator
         layout.addWidget(self.tbl_tracks, 1)
 
+        self.prg_scan = QProgressBar()
+        self.prg_scan.setMaximumWidth(220)
+        self.prg_scan.setFormat("Reading tags %v / %m")
+        self.prg_scan.hide()
+        self.statusBar().addPermanentWidget(self.prg_scan)
         self.lbl_count = QLabel()
         self.statusBar().addPermanentWidget(self.lbl_count)
         self.statusBar().showMessage("on the way…")
@@ -165,6 +173,42 @@ class MainWindow(QMainWindow):
     def showStatus(self, txt):
         self.statusBar().showMessage(txt)
         self.statusBar().repaint()
+
+    # The window stays usable while the scan runs on a background thread.
+    def loadLibrary(self, path):
+        self.clock.stop()
+        self.player.stop()
+        self.refreshIcons()
+        self.setLibraryControlsEnabled(False)
+        self.prg_scan.setRange(0, 0)  # busy until the scan knows how many files it must read
+        self.prg_scan.show()
+        self.showStatus("Scanning " + path + "…")
+        self.scanner = LibraryScanner(path, self)
+        self.scanner.progress.connect(self.scanProgress)
+        self.scanner.loaded.connect(self.setLibrary)
+        self.scanner.start()
+
+    def scanProgress(self, done, total):
+        self.prg_scan.setRange(0, total)
+        self.prg_scan.setValue(done)
+
+    def setLibrary(self, tracks):
+        self.prg_scan.hide()
+        self.session = Session.PlayerSession(tracks, self.commentator)
+        self.session.start()
+        previousModel = self.trackModel
+        self.trackModel = TrackTableModel(tracks, self)
+        header = self.tbl_tracks.horizontalHeader()
+        self.trackModel.sort(header.sortIndicatorSection(), header.sortIndicatorOrder())
+        self.trackProxy.setSourceModel(self.trackModel)
+        previousModel.deleteLater()
+        self.updateCount()
+        self.setLibraryControlsEnabled(True)
+        self.showStatus(str(len(tracks)) + " tracks loaded" if tracks else "No audio files found in the music folder")
+
+    def setLibraryControlsEnabled(self, enabled):
+        for w in (self.inp_find, self.btn_find, self.btn_play, self.btn_next, self.btn_random, self.sld_time, self.tbl_tracks):
+            w.setEnabled(enabled)
 
     def findTrack(self):
         filter = self.inp_find.text()
@@ -282,6 +326,9 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.seek)
 
     def closeEvent(self, event):
+        if(self.scanner is not None and self.scanner.isRunning()):
+            self.scanner.requestInterruption()
+            self.scanner.wait()
         self.clock.stop()
         self.player.stop()
         self.settings["volume"] = self.player.getVolume()

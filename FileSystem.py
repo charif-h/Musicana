@@ -22,7 +22,8 @@ def listAudioFiles(path):
                 yield os.path.normpath(os.path.join(root, name))
 
 # Tags are only re-read for files that are new or changed since the cached scan.
-def getAllTracks(path, cachePath=None):
+# progress(done, total), if given, is called after each file read instead of printing to the console.
+def getAllTracks(path, cachePath=None, progress=None):
     cachePath = cachePath or TrackCache.defaultPath()
     cache = TrackCache.load(cachePath)
     root = os.path.normpath(path) + os.sep
@@ -53,6 +54,9 @@ def getAllTracks(path, cachePath=None):
         except (mutagen.MutagenError, OSError) as e:
             print("\nSkipping unreadable file", f, ":", e)
 
+        if(progress is not None):
+            progress(i + 1, Nb)
+            continue
         percent = str(int(100*i/Nb)) + "%"
         print("\b"*(1 + len(percent)), end="")
         print(percent, end="")
