@@ -1,6 +1,6 @@
 from Windelphi import Application
 
-# Root folder scanned recursively for .mp3 files.
+# Root folder scanned recursively for audio files (see FileSystem.AUDIO_EXTENSIONS).
 MUSIC_PATH = 'C:\\Users\\chari\\Documents\\D\\Music/'
 
 if __name__ == '__main__':

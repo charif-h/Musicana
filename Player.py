@@ -1,8 +1,5 @@
 import pygame
 import mutagen
-import mutagen.mp3
-
-from FileSystem import getMp3Info
 
 
 class Player():
@@ -11,23 +8,15 @@ class Player():
         self.playing = None
 
     def play(self, song):
-        mp3 = mutagen.mp3.MP3(song)
+        audio = mutagen.File(song)
         v = self.getVolume()
         pygame.mixer.quit()
-        pygame.mixer.init(frequency=mp3.info.sample_rate)
+        pygame.mixer.init(frequency=audio.info.sample_rate)
         self.setVolume(v)
         pygame.mixer.music.load(song)
-        mp3info = getMp3Info(song)
-        print(mp3info)
         pygame.mixer.music.play()
         self.playing = pygame.mixer.music.get_busy() == 1
-        self.mp3Length = mp3.info.length
-        return mp3info
-
-    def getImage(self, path):
-        print(path)
-        print(mutagen.File(path)['APIC'])
-        return mutagen.File(path)['APIC'].data
+        self.trackLength = audio.info.length
 
     def pause(self):
         pygame.mixer.music.pause()

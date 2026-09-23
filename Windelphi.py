@@ -1,5 +1,4 @@
 from tkinter import *  # for UI
-from mutagen import File
 from PIL import ImageTk, Image
 from io import BytesIO
 
@@ -20,7 +19,7 @@ class Application(Frame):
         self.root = Tk() # creates an Empty window
         self.commentateur = Comentateur.Commentator()
 
-        self.session = Session.PlayerSession(FileSystem.getAllMp3(musicPath), self.commentateur)
+        self.session = Session.PlayerSession(FileSystem.getAllTracks(musicPath), self.commentateur)
         self.player = Player.Player()
         self.commentateur.say("Hello, Any filter to start from? : ")
         self.session.start()
@@ -83,7 +82,10 @@ class Application(Frame):
         self.root.mainloop()
 
     def findTrack(self):
-        self.session.start(self.inp_find.get())
+        filter = self.inp_find.get()
+        if(self.session.start(filter) is None):
+            self.statusbar.configure(text="No track matches '" + filter + "'")
+            return
         self.playCurrent()
 
     def findTrackKey(self, event):
@@ -94,14 +96,17 @@ class Application(Frame):
         self.play()
 
     def play(self):
+        if(self.session.current is None):
+            self.statusbar.configure(text="No audio files found in the music folder")
+            return
         if(self.player.playing is None):
             self.btn_play["text"] = "stop"
             self.scl_time.set(value=0)
             self.scl_son.set(value=self.player.getVolume())
-            info = self.player.play(self.session.current)
-            self.displayTrackInfo(info)
-            self.scl_time.configure(to=self.player.mp3Length)
-            self.lbl_trackLength.configure(text= intToTimeText(int(self.player.mp3Length)))
+            self.player.play(self.session.current)
+            self.displayTrackInfo(self.session.tracks[self.session.current])
+            self.scl_time.configure(to=self.player.trackLength)
+            self.lbl_trackLength.configure(text= intToTimeText(int(self.player.trackLength)))
         elif(self.player.playing):
             self.btn_play["text"] = "play"
             self.player.pause()
@@ -149,9 +154,8 @@ class Application(Frame):
         self.frm_image = Frame(self.frm_track, width=300, height=300)
         self.frm_image.pack(side=LEFT)
 
-        file = File(track)
-        if('APIC:' in file.tags.keys()):
-            artwork = file.tags['APIC:'].data  # access APIC frame and grab the image
+        artwork = FileSystem.getArtwork(track)
+        if(artwork is not None):
             self.original = Image.open(BytesIO(artwork))
             self.fitted = self.original.resize((300, 300),Image.LANCZOS)
             self.imge = ImageTk.PhotoImage(self.fitted)
@@ -179,7 +183,7 @@ class Application(Frame):
             self.scl_time.set(value=self.player.getPos())
             self.root.after(1000, self.update_clock)
         if(self.player.isTrackEnded()):
-            self.statusbar =  ""
+            self.statusbar.configure(text="")
             print("song ended")
             self.next()
 
