@@ -54,7 +54,10 @@ class Application(Frame):
         btn_random.pack(side='left')
 
         self.scl_time = Scale(frm_player, from_=0, to=342, orient=HORIZONTAL)
+        self.scl_time.bind("<ButtonPress-1>", self.startSeek)
         self.scl_time.bind("<ButtonRelease-1>", self.setPos)
+        self.seeking = False
+        self.clockJob = None
         self.scl_time.pack(side=LEFT)
         self.lbl_trackLength = Label(frm_player, text="00", padx=1, pady=5)
         self.lbl_trackLength.pack(side=LEFT)
@@ -113,6 +116,9 @@ class Application(Frame):
         else:
             self.btn_play["text"] = "stop"
             self.player.resume()
+        if(self.clockJob is not None):
+            self.root.after_cancel(self.clockJob)
+            self.clockJob = None
         self.update_clock()
 
     def displayTrackInfo(self, info):
@@ -178,20 +184,31 @@ class Application(Frame):
             self.bgColor = '#%02x%02x%02x' % (R//sum, G//sum, B//sum)
             self.fgColor = '#%02x%02x%02x' % (((R // sum) + 127)%255, ((G // sum) + 127)%255, ((B // sum) + 127)%255)
 
+    # Polled with after() rather than VLC events: those fire on a VLC thread, and Tk is not thread-safe.
     def update_clock(self):
+        self.clockJob = None
         if(self.player.playing):
-            self.scl_time.set(value=self.player.getPos())
-            self.root.after(1000, self.update_clock)
+            self.player.refresh()
+            if(int(self.player.trackLength) != int(self.scl_time.cget("to"))):
+                self.scl_time.configure(to=self.player.trackLength)
+                self.lbl_trackLength.configure(text= intToTimeText(int(self.player.trackLength)))
+            if not(self.seeking):
+                self.scl_time.set(value=self.player.getPos())
+            self.clockJob = self.root.after(1000, self.update_clock)
         if(self.player.isTrackEnded()):
             self.statusbar.configure(text="")
             print("song ended")
             self.next()
 
+    def startSeek(self, event):
+        self.seeking = True
+
     def setPos(self, event):
+        self.seeking = False
         self.player.setPos(int(self.scl_time.get()))
 
     def setVolume(self, event):
-        self.player.setVolume(int(self.scl_son.get())/100)
+        self.player.setVolume(int(self.scl_son.get()))
 
     def mkString(self, List, sep=" / "):
         s = ""

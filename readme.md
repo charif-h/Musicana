@@ -6,6 +6,8 @@ The final idea of the this project is to have many recommendations agents using 
 # How to use it?
 Root folder with subfolders getallMp3
 
+Playback uses [VLC](https://www.videolan.org/vlc/): install it first (64-bit if your Python is 64-bit), then `pip install -r requirements.txt`.
+
 Set `MUSIC_PATH` in `main.py` to your music root folder, then start the Tkinter GUI with:
 
 ```
