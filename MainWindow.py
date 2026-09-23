@@ -1,6 +1,6 @@
 import os
 
-from PySide6.QtCore import QByteArray, QItemSelectionModel, Qt, QTimer
+from PySide6.QtCore import QByteArray, QItemSelectionModel, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QIcon, QKeySequence, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFileDialog, QFrame, QHBoxLayout,
                                QHeaderView, QLabel, QLineEdit, QMainWindow, QProgressBar, QPushButton, QSlider,
@@ -25,8 +25,11 @@ def mkString(values, sep=" / "):
     return sep.join(values)
 
 class MainWindow(QMainWindow):
+    announced = Signal(int)  # emitted from the Commentator's thread; delivered on the UI thread
+
     def __init__(self, player, commentator, settings):
         super().__init__()
+        self.transition = 0  # id of the latest transition: an older announcement finishing is ignored
         self.session = Session.PlayerSession({}, commentator)  # until loadLibrary()/setLibrary()
         self.scanner = None
         self.player = player
@@ -159,6 +162,7 @@ class MainWindow(QMainWindow):
         self.artImage = None
         self.frm_nowPlaying.setStyleSheet(Theme.nowPlayingStyle())
         self.refreshIcons()
+        self.announced.connect(self.playAnnounced)
 
     # Standard icons tinted with the theme's text color: Fusion's own are dark, even in dark mode.
     def icon(self, standardPixmap):
@@ -177,10 +181,8 @@ class MainWindow(QMainWindow):
         self.btn_random.setIcon(self.icon(QStyle.SP_BrowserReload))
         self.lbl_volume.setPixmap(self.icon(QStyle.SP_MediaVolume).pixmap(16, 16))
 
-    # Shown before the Commentator starts speaking, which blocks the UI until it is done.
     def showStatus(self, txt):
         self.statusBar().showMessage(txt)
-        self.statusBar().repaint()
 
     # MUSICANA_MUSIC_PATH (environment or .env), else the folder saved in the settings, else ask once.
     def initialMusicFolder(self):
@@ -288,6 +290,8 @@ class MainWindow(QMainWindow):
             self.showStatus("No audio files found in the music folder")
             return
         if(self.player.playing is None):
+            self.transition += 1  # starting a track overrides any announcement still in progress
+            self.commentator.cancel()
             self.player.play(self.session.current)
             self.showTrack(self.session.current)
             self.trackModel.setCurrent(self.session.current)
@@ -305,12 +309,25 @@ class MainWindow(QMainWindow):
         self.updateClock()
 
     def next(self):
-        self.session.next()
-        self.playCurrent()
+        self.announce(self.session.next)
 
     def randomTrack(self):
-        self.session.random()
-        self.playCurrent()
+        self.announce(self.session.random)
+
+    # DJ style: the old track stops, the Commentator announces the new one, then it starts playing.
+    # Next/Random again (or Play) during the announcement cuts it short.
+    def announce(self, move):
+        self.transition += 1
+        transition = self.transition
+        self.commentator.cancel()
+        self.clock.stop()
+        self.player.stop()
+        self.refreshIcons()
+        move(onDone=lambda: self.announced.emit(transition))
+
+    def playAnnounced(self, transition):
+        if(transition == self.transition):
+            self.playCurrent()
 
     def showTrack(self, track):
         tags = self.session.tracks[track]
@@ -368,6 +385,7 @@ class MainWindow(QMainWindow):
             self.scanner.wait()
         self.clock.stop()
         self.player.stop()
+        self.commentator.shutdown()
         self.settings["volume"] = self.player.getVolume()
         self.settings["windowGeometry"] = self.saveGeometry().toBase64().data().decode()
         self.settings["tableHeader"] = self.tbl_tracks.horizontalHeader().saveState().toBase64().data().decode()
