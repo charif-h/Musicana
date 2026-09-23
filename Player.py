@@ -1,5 +1,6 @@
 import pygame
 import mutagen
+import mutagen.mp3
 
 from FileSystem import getMp3Info
 
