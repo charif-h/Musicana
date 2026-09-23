@@ -12,6 +12,7 @@ STYLESHEET = """
 QPushButton {{ padding: 5px 12px; border: 1px solid {border}; border-radius: 6px; background: {surfaceAlt}; }}
 QPushButton:hover {{ border-color: {accent}; }}
 QPushButton:pressed {{ background: {border}; }}
+QPushButton:disabled, QLineEdit:disabled {{ color: {muted}; border-color: {surfaceAlt}; }}
 QLineEdit {{ padding: 5px 8px; border: 1px solid {border}; border-radius: 6px; background: {surface}; }}
 QLineEdit:focus {{ border-color: {accent}; }}
 QSlider::groove:horizontal {{ height: 4px; background: {border}; border-radius: 2px; }}

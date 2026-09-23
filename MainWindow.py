@@ -1,14 +1,20 @@
-from PySide6.QtCore import QItemSelectionModel, Qt, QTimer
-from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPalette, QPixmap
-from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFrame, QHBoxLayout, QHeaderView,
-                               QLabel, QLineEdit, QMainWindow, QPushButton, QSlider, QStyle, QTableView,
-                               QVBoxLayout, QWidget)
+import os
+
+from PySide6.QtCore import QByteArray, QItemSelectionModel, Qt, QTimer, Signal
+from PySide6.QtGui import QGuiApplication, QIcon, QKeySequence, QPainter, QPalette, QPixmap
+from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFileDialog, QFrame, QHBoxLayout,
+                               QHeaderView, QLabel, QLineEdit, QMainWindow, QProgressBar, QPushButton, QSlider,
+                               QStyle, QTableView, QVBoxLayout, QWidget)
 
 import FileSystem
+import Session
+import Settings
 import Theme
+from LibraryScanner import LibraryScanner
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
 ART_SIZE = 200
+MUSIC_PATH_VARIABLE = "MUSICANA_MUSIC_PATH"
 MAIN_TAGS = ("title", "artist", "album", "genre", "date")
 
 def formatTime(seconds):
@@ -19,13 +25,23 @@ def mkString(values, sep=" / "):
     return sep.join(values)
 
 class MainWindow(QMainWindow):
-    def __init__(self, session, player, commentator):
+    announced = Signal(int)  # emitted from the Commentator's thread; delivered on the UI thread
+
+    def __init__(self, player, commentator, settings):
         super().__init__()
-        self.session = session
+        self.transition = 0  # id of the latest transition: an older announcement finishing is ignored
+        self.session = Session.PlayerSession({}, commentator)  # until loadLibrary()/setLibrary()
+        self.scanner = None
         self.player = player
         self.commentator = commentator
+        self.settings = settings
         self.setWindowTitle("Musicana")
         self.resize(960, 720)
+        fileMenu = self.menuBar().addMenu("&File")
+        fileMenu.addAction("Change &music folder…", QKeySequence.Open, self.changeMusicFolder)
+        fileMenu.addSeparator()
+        fileMenu.addAction("&Quit", QKeySequence("Ctrl+Q"), self.close)
+
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
@@ -86,13 +102,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.frm_nowPlaying)
 
         # library
-        self.trackModel = TrackTableModel(self.session.tracks, self)
+        self.trackModel = TrackTableModel({}, self)
         self.trackProxy = TrackFilterProxy(self)
         self.trackProxy.setSourceModel(self.trackModel)
         self.tbl_tracks = QTableView()
         self.tbl_tracks.setModel(self.trackProxy)
-        self.tbl_tracks.horizontalHeader().setSortIndicator(1, Qt.AscendingOrder)
-        self.tbl_tracks.setSortingEnabled(True)
         self.tbl_tracks.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tbl_tracks.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tbl_tracks.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -105,8 +119,17 @@ class MainWindow(QMainWindow):
         for column, width in enumerate((280, 180, 200, 120)):
             header.resizeSection(column, width)
         header.setStretchLastSection(True)
+        header.setSortIndicator(1, Qt.AscendingOrder)
+        if(settings["tableHeader"]):  # column widths and sort column/order
+            header.restoreState(QByteArray.fromBase64(settings["tableHeader"].encode()))
+        self.tbl_tracks.setSortingEnabled(True)  # sorts once, by the restored indicator
         layout.addWidget(self.tbl_tracks, 1)
 
+        self.prg_scan = QProgressBar()
+        self.prg_scan.setMaximumWidth(220)
+        self.prg_scan.setFormat("Reading tags %v / %m")
+        self.prg_scan.hide()
+        self.statusBar().addPermanentWidget(self.prg_scan)
         self.lbl_count = QLabel()
         self.statusBar().addPermanentWidget(self.lbl_count)
         self.statusBar().showMessage("on the way…")
@@ -130,12 +153,16 @@ class MainWindow(QMainWindow):
         self.sld_time.sliderMoved.connect(lambda v: self.lbl_pos.setText(formatTime(v)))
         self.sld_time.sliderReleased.connect(self.seek)
         self.sld_time.actionTriggered.connect(self.timeSliderAction)
+        self.player.setVolume(settings["volume"])
         self.sld_volume.setValue(self.player.getVolume())
+        if(settings["windowGeometry"]):
+            self.restoreGeometry(QByteArray.fromBase64(settings["windowGeometry"].encode()))
         self.sld_volume.valueChanged.connect(self.player.setVolume)
         QGuiApplication.styleHints().colorSchemeChanged.connect(self.colorSchemeChanged)
         self.artImage = None
         self.frm_nowPlaying.setStyleSheet(Theme.nowPlayingStyle())
         self.refreshIcons()
+        self.announced.connect(self.playAnnounced)
 
     # Standard icons tinted with the theme's text color: Fusion's own are dark, even in dark mode.
     def icon(self, standardPixmap):
@@ -154,10 +181,73 @@ class MainWindow(QMainWindow):
         self.btn_random.setIcon(self.icon(QStyle.SP_BrowserReload))
         self.lbl_volume.setPixmap(self.icon(QStyle.SP_MediaVolume).pixmap(16, 16))
 
-    # Shown before the Commentator starts speaking, which blocks the UI until it is done.
     def showStatus(self, txt):
         self.statusBar().showMessage(txt)
-        self.statusBar().repaint()
+
+    # MUSICANA_MUSIC_PATH (environment or .env), else the folder saved in the settings, else ask once.
+    def initialMusicFolder(self):
+        fromEnvironment = os.environ.get(MUSIC_PATH_VARIABLE)
+        if(fromEnvironment):
+            if(os.path.isdir(fromEnvironment)):
+                return fromEnvironment
+            print(MUSIC_PATH_VARIABLE, "is not a folder:", fromEnvironment)
+        if(self.settings["musicPath"] and os.path.isdir(self.settings["musicPath"])):
+            return self.settings["musicPath"]
+        return self.chooseMusicFolder()
+
+    # Returns the chosen folder (remembered in the settings), or None if the dialog was cancelled.
+    def chooseMusicFolder(self):
+        start = self.settings["musicPath"] or os.path.join(os.path.expanduser("~"), "Music")
+        path = QFileDialog.getExistingDirectory(self, "Choose your music folder", start)
+        if not(path):
+            return None
+        self.settings["musicPath"] = path
+        Settings.save(self.settings)
+        return path
+
+    def changeMusicFolder(self):
+        path = self.chooseMusicFolder()
+        if(path is None):
+            return
+        self.loadLibrary(path)
+        if(os.environ.get(MUSIC_PATH_VARIABLE)):
+            self.showStatus("Note: " + MUSIC_PATH_VARIABLE + " is set and will be used again at the next start")
+
+    # The window stays usable while the scan runs on a background thread.
+    def loadLibrary(self, path):
+        self.clock.stop()
+        self.player.stop()
+        self.refreshIcons()
+        self.setLibraryControlsEnabled(False)
+        self.prg_scan.setRange(0, 0)  # busy until the scan knows how many files it must read
+        self.prg_scan.show()
+        self.showStatus("Scanning " + path + "…")
+        self.scanner = LibraryScanner(path, self)
+        self.scanner.progress.connect(self.scanProgress)
+        self.scanner.loaded.connect(self.setLibrary)
+        self.scanner.start()
+
+    def scanProgress(self, done, total):
+        self.prg_scan.setRange(0, total)
+        self.prg_scan.setValue(done)
+
+    def setLibrary(self, tracks):
+        self.prg_scan.hide()
+        self.session = Session.PlayerSession(tracks, self.commentator)
+        self.session.start()
+        previousModel = self.trackModel
+        self.trackModel = TrackTableModel(tracks, self)
+        header = self.tbl_tracks.horizontalHeader()
+        self.trackModel.sort(header.sortIndicatorSection(), header.sortIndicatorOrder())
+        self.trackProxy.setSourceModel(self.trackModel)
+        previousModel.deleteLater()
+        self.updateCount()
+        self.setLibraryControlsEnabled(True)
+        self.showStatus(str(len(tracks)) + " tracks loaded" if tracks else "No audio files found in the music folder")
+
+    def setLibraryControlsEnabled(self, enabled):
+        for w in (self.inp_find, self.btn_find, self.btn_play, self.btn_next, self.btn_random, self.sld_time, self.tbl_tracks):
+            w.setEnabled(enabled)
 
     def findTrack(self):
         filter = self.inp_find.text()
@@ -200,6 +290,8 @@ class MainWindow(QMainWindow):
             self.showStatus("No audio files found in the music folder")
             return
         if(self.player.playing is None):
+            self.transition += 1  # starting a track overrides any announcement still in progress
+            self.commentator.cancel()
             self.player.play(self.session.current)
             self.showTrack(self.session.current)
             self.trackModel.setCurrent(self.session.current)
@@ -217,12 +309,25 @@ class MainWindow(QMainWindow):
         self.updateClock()
 
     def next(self):
-        self.session.next()
-        self.playCurrent()
+        self.announce(self.session.next)
 
     def randomTrack(self):
-        self.session.random()
-        self.playCurrent()
+        self.announce(self.session.random)
+
+    # DJ style: the old track stops, the Commentator announces the new one, then it starts playing.
+    # Next/Random again (or Play) during the announcement cuts it short.
+    def announce(self, move):
+        self.transition += 1
+        transition = self.transition
+        self.commentator.cancel()
+        self.clock.stop()
+        self.player.stop()
+        self.refreshIcons()
+        move(onDone=lambda: self.announced.emit(transition))
+
+    def playAnnounced(self, transition):
+        if(transition == self.transition):
+            self.playCurrent()
 
     def showTrack(self, track):
         tags = self.session.tracks[track]
@@ -275,6 +380,14 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.seek)
 
     def closeEvent(self, event):
+        if(self.scanner is not None and self.scanner.isRunning()):
+            self.scanner.requestInterruption()
+            self.scanner.wait()
         self.clock.stop()
         self.player.stop()
+        self.commentator.shutdown()
+        self.settings["volume"] = self.player.getVolume()
+        self.settings["windowGeometry"] = self.saveGeometry().toBase64().data().decode()
+        self.settings["tableHeader"] = self.tbl_tracks.horizontalHeader().saveState().toBase64().data().decode()
+        Settings.save(self.settings)
         super().closeEvent(event)

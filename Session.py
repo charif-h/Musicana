@@ -19,28 +19,36 @@ class PlayerSession():
         self.setCurrent(random.choice(list(filteredTracks)))
         return self.current
 
-    def next(self):
+    # next(), random() and moveTo() call onDone() exactly once, when the transition has been announced.
+    def next(self, onDone=None):
         if(self.current is None):
-            return self.start()
+            track = self.start()
+            if(onDone is not None):
+                onDone()
+            return track
         track, cause = Nexter_RandomWalk.next(self.tracks, self.current, self.history)
-        return self.moveTo(track, cause)
+        return self.moveTo(track, cause, onDone)
 
-    def random(self):
+    def random(self, onDone=None):
         if(len(self.tracks) == 0):
+            if(onDone is not None):
+                onDone()
             return None
         track, cause = Nexter_RandomWalk.nextIsRandom(self.tracks)
-        return self.moveTo(track, cause)
+        return self.moveTo(track, cause, onDone)
 
     # A track the user picked: no transition to announce.
     def select(self, track):
         self.setCurrent(track)
         return track
 
-    def moveTo(self, track, cause):
+    def moveTo(self, track, cause, onDone=None):
         previous = self.current
         self.setCurrent(track)
         if(self.commentator is not None and previous is not None):
-            self.commentator.transition(self.tracks[previous], self.tracks[track], cause)
+            self.commentator.transition(self.tracks[previous], self.tracks[track], cause, onDone)
+        elif(onDone is not None):
+            onDone()
         return track
 
     def setCurrent(self, track):
