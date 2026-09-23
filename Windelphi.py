@@ -25,7 +25,7 @@ class Application(Frame):
         #self.root.minsize(300,300) # set size as 300 x 300 wide, Change this accordingly
         self.commentateur = Comentateur.Commentator()
 
-        self.tracks = FileSystem.getAllMp3('D:/Music/')
+        self.tracks = FileSystem.getAllMp3('C:\\Users\\chari\\Documents\\D\\Music/')
         self.player = Player.Player()
         self.commentateur.say("Hello, Any filter to start from? : ")
         self.titles = self.getTracksKeys(self.tracks)
