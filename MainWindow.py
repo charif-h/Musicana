@@ -1,10 +1,11 @@
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QFrame, QHBoxLayout, QHeaderView, QLabel,
-                               QLineEdit, QMainWindow, QPushButton, QSlider, QStyle, QTableView, QVBoxLayout,
-                               QWidget)
+from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPalette, QPixmap
+from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFrame, QHBoxLayout, QHeaderView,
+                               QLabel, QLineEdit, QMainWindow, QPushButton, QSlider, QStyle, QTableView,
+                               QVBoxLayout, QWidget)
 
 import FileSystem
+import Theme
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
 ART_SIZE = 200
@@ -41,22 +42,21 @@ class MainWindow(QMainWindow):
 
         # player controls
         controls = QHBoxLayout()
-        self.btn_play = QPushButton(self.icon(QStyle.SP_MediaPlay), "Play")
-        self.btn_next = QPushButton(self.icon(QStyle.SP_MediaSkipForward), "Next")
-        self.btn_random = QPushButton(self.icon(QStyle.SP_BrowserReload), "Random")
+        self.btn_play = QPushButton("Play")
+        self.btn_next = QPushButton("Next")
+        self.btn_random = QPushButton("Random")
         self.lbl_pos = QLabel(formatTime(0))
         self.sld_time = QSlider(Qt.Horizontal)
         self.sld_time.setPageStep(10)
         self.lbl_length = QLabel(formatTime(0))
-        lbl_volume = QLabel()
-        lbl_volume.setPixmap(self.icon(QStyle.SP_MediaVolume).pixmap(16, 16))
+        self.lbl_volume = QLabel()
         self.sld_volume = QSlider(Qt.Horizontal)
         self.sld_volume.setRange(0, 100)
         self.sld_volume.setFixedWidth(120)
         for w in (self.btn_play, self.btn_next, self.btn_random, self.lbl_pos):
             controls.addWidget(w)
         controls.addWidget(self.sld_time, 1)
-        for w in (self.lbl_length, lbl_volume, self.sld_volume):
+        for w in (self.lbl_length, self.lbl_volume, self.sld_volume):
             controls.addWidget(w)
         layout.addLayout(controls)
 
@@ -132,9 +132,27 @@ class MainWindow(QMainWindow):
         self.sld_time.actionTriggered.connect(self.timeSliderAction)
         self.sld_volume.setValue(self.player.getVolume())
         self.sld_volume.valueChanged.connect(self.player.setVolume)
+        QGuiApplication.styleHints().colorSchemeChanged.connect(self.colorSchemeChanged)
+        self.artImage = None
+        self.frm_nowPlaying.setStyleSheet(Theme.nowPlayingStyle())
+        self.refreshIcons()
 
+    # Standard icons tinted with the theme's text color: Fusion's own are dark, even in dark mode.
     def icon(self, standardPixmap):
-        return self.style().standardIcon(standardPixmap)
+        pixmap = self.style().standardIcon(standardPixmap).pixmap(32, 32)
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), self.palette().color(QPalette.ButtonText))
+        painter.end()
+        return QIcon(pixmap)
+
+    def refreshIcons(self):
+        playing = bool(self.player.playing)
+        self.btn_play.setIcon(self.icon(QStyle.SP_MediaPause if playing else QStyle.SP_MediaPlay))
+        self.btn_play.setText("Pause" if playing else "Play")
+        self.btn_next.setIcon(self.icon(QStyle.SP_MediaSkipForward))
+        self.btn_random.setIcon(self.icon(QStyle.SP_BrowserReload))
+        self.lbl_volume.setPixmap(self.icon(QStyle.SP_MediaVolume).pixmap(16, 16))
 
     # Shown before the Commentator starts speaking, which blocks the UI until it is done.
     def showStatus(self, txt):
@@ -178,13 +196,10 @@ class MainWindow(QMainWindow):
         else:
             self.player.resume()
         if(self.player.playing):
-            self.btn_play.setIcon(self.icon(QStyle.SP_MediaPause))
-            self.btn_play.setText("Pause")
             self.clock.start()
         else:
-            self.btn_play.setIcon(self.icon(QStyle.SP_MediaPlay))
-            self.btn_play.setText("Play")
             self.clock.stop()
+        self.refreshIcons()
         self.updateClock()
 
     def next(self):
@@ -206,9 +221,17 @@ class MainWindow(QMainWindow):
         artwork = FileSystem.getArtwork(track)
         if(artwork is not None and pixmap.loadFromData(artwork)):
             self.lbl_art.setPixmap(pixmap.scaled(ART_SIZE, ART_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.artImage = pixmap.toImage()
         else:
             self.lbl_art.setPixmap(QPixmap())
             self.lbl_art.setText("♪")
+            self.artImage = None
+        self.frm_nowPlaying.setStyleSheet(Theme.nowPlayingStyle(self.artImage))
+
+    def colorSchemeChanged(self, scheme):
+        Theme.apply(QApplication.instance())
+        self.refreshIcons()
+        self.frm_nowPlaying.setStyleSheet(Theme.nowPlayingStyle(self.artImage))
 
     def updateClock(self):
         if(self.player.playing):
