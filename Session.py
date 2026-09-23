@@ -31,6 +31,11 @@ class PlayerSession():
         track, cause = Nexter_RandomWalk.nextIsRandom(self.tracks)
         return self.moveTo(track, cause)
 
+    # A track the user picked: no transition to announce.
+    def select(self, track):
+        self.setCurrent(track)
+        return track
+
     def moveTo(self, track, cause):
         previous = self.current
         self.setCurrent(track)
