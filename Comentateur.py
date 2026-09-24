@@ -31,6 +31,7 @@ RATE = 2  # SAPI's -10..10 scale; about 150 words per minute
 class Commentator:
     def __init__(self):
         self.display = None
+        self.enabled = True  # when False, say() is silent and finishes at once
         self.requests = queue.Queue()
         self.generation = 0  # bumped by cancel(): older requests are dropped or cut short
         self.thread = threading.Thread(target=self.speakLoop, name="Commentator", daemon=True)
@@ -67,6 +68,11 @@ class Commentator:
             if(onDone is not None):
                 onDone()
 
+    def setEnabled(self, enabled):
+        self.enabled = enabled
+        if not(enabled):
+            self.cancel()  # cuts short what is being said
+
     def cancel(self):
         self.generation += 1
 
@@ -96,6 +102,10 @@ class Commentator:
             say("It is time to change, listen with use to " + first(t2, 'title'))
 
     def say(self, txt, onDone=None):
+        if not(self.enabled):
+            if(onDone is not None):
+                onDone()
+            return
         self.Display(txt)
         self.requests.put((txt, self.generation, onDone))
 
@@ -114,4 +124,4 @@ class Commentator:
         if callable(self.display):
             self.display(txt)
         else:
-            print(txt)
+            print(txt)

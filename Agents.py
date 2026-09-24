@@ -1,8 +1,11 @@
+import logging
 import os
 import random
 
 import Nexter_RandomWalk
 from Nexter_RandomWalk import TrackFilter
+
+log = logging.getLogger(__name__)
 
 # Every agent answers the same question: which track should follow `current`, given the recently
 # played `history` (tracks to avoid)? next() returns (track, cause), where cause (album, artist,
@@ -148,7 +151,7 @@ class SoundAlike(RecommendationAgent):
         m = (m - m.mean(axis=0)) / (m.std(axis=0) + 1e-9)  # every feature weighs the same
         self.matrix = m / (numpy.linalg.norm(m, axis=1, keepdims=True) + 1e-9)  # rows . row = cosine similarity
 
-    # The n analysed tracks most similar to `current`, skipping recent tracks and other copies of the same song.
+    # The n analysed tracks most similar to `current` as (track, cosine similarity), skipping recent tracks and other copies of the same song.
     def similar(self, tracks, current, history, n):
         import numpy
         avoid = set(history) | {current}
@@ -158,7 +161,7 @@ class SoundAlike(RecommendationAgent):
         for i in numpy.argsort(-scores):
             t = self.paths[i]
             if(t in tracks and t not in avoid and tracks[t]["title"][0] not in titles):
-                found.append(t)
+                found.append((t, float(scores[i])))
                 if(len(found) == n):
                     break
         return found
@@ -169,7 +172,10 @@ class SoundAlike(RecommendationAgent):
         candidates = self.similar(tracks, current, history, self.topN)
         if not(candidates):
             return RandomWalk().next(tracks, current, history)
-        return random.choice(candidates), "sound"
+        log.info("Top %d tracks similar to %s:", len(candidates), tracks[current]["title"][0])
+        for t, score in candidates:
+            log.info("  %s (similarity %.3f)", tracks[t]["title"][0], score)
+        return random.choice(candidates)[0], "sound"
 
 AGENTS = [RandomWalk(), Shuffle(), AlbumJourney(), GenreExplorer(), EraExplorer(), SoundAlike()]
 
