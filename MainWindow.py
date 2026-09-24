@@ -47,6 +47,11 @@ class MainWindow(QMainWindow):
         fileMenu.addAction("Change &music folder…", QKeySequence.Open, self.changeMusicFolder)
         fileMenu.addSeparator()
         fileMenu.addAction("&Quit", QKeySequence("Ctrl+Q"), self.close)
+        commentatorMenu = self.menuBar().addMenu("&Commentator")
+        self.act_commentator = commentatorMenu.addAction("&Enable commentator")
+        self.act_commentator.setCheckable(True)
+        self.act_commentator.setChecked(bool(settings["commentator"]))
+        self.act_commentator.toggled.connect(self.setCommentatorEnabled)
         agentMenu = self.menuBar().addMenu("&Agent")
         agentMenu.setToolTipsVisible(True)
         agentGroup = QActionGroup(self)
@@ -316,6 +321,12 @@ class MainWindow(QMainWindow):
     def setLibraryControlsEnabled(self, enabled):
         for w in (self.inp_find, self.btn_find, self.btn_play, self.btn_next, self.btn_random, self.sld_time, self.tbl_tracks):
             w.setEnabled(enabled)
+
+    def setCommentatorEnabled(self, enabled):
+        self.commentator.setEnabled(enabled)
+        self.settings["commentator"] = enabled
+        Settings.save(self.settings)
+        self.showStatus("Commentator " + ("enabled" if enabled else "disabled"))
 
     def setAgent(self, agent):
         self.agent = agent
