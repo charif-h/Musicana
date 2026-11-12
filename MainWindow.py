@@ -13,6 +13,7 @@ import Session
 import Settings
 import Theme
 from AudioAnalyzer import AudioAnalyzer
+from AlbumDelegate import AlbumDelegate, CELL_SIZE
 from GroupedTracksModel import COVER_SIZE, GroupedTracksModel, MODES, THUMB_SIZE
 from LibraryScanner import LibraryScanner
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
@@ -168,7 +169,8 @@ class MainWindow(QMainWindow):
         self.lst_albums.setModel(self.groupedModel)
         self.lst_albums.setViewMode(QListView.IconMode)
         self.lst_albums.setIconSize(QSize(COVER_SIZE, COVER_SIZE))
-        self.lst_albums.setGridSize(QSize(COVER_SIZE + 30, COVER_SIZE + 70))
+        self.lst_albums.setGridSize(CELL_SIZE)
+        self.lst_albums.setItemDelegate(AlbumDelegate(self.lst_albums))
         self.lst_albums.setResizeMode(QListView.Adjust)
         self.lst_albums.setMovement(QListView.Static)
         self.lst_albums.setWordWrap(True)

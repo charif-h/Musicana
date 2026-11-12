@@ -7,6 +7,7 @@ import FileSystem
 from TrackTableModel import PATH_ROLE
 
 ART_ROLE = Qt.UserRole + 1  # path of the track whose artwork stands for a group (albums)
+ALBUM_INFO_ROLE = Qt.UserRole + 2  # {"name", "artist", "year", "count"} of an album, for the grid's caption
 THUMB_SIZE = 56  # album icon in the tree
 COVER_SIZE = 160  # album cover in the grid; also the size the artwork is scaled to once
 
@@ -98,8 +99,11 @@ class GroupedTracksModel(QStandardItemModel):
         artist = artists[0] if len(artists) == 1 else ("Various artists" if artists else "")
         years = sorted({tagText(tracks[p], "date")[:4] for p in members} - {""})
         count = str(len(members)) + (" track" if len(members) == 1 else " tracks")
-        details = " · ".join(v for v in (artist, years[0] if years else "", count) if v)
-        item.setText((name or UNKNOWN["album"]) + "\n" + details)
+        name = name or UNKNOWN["album"]
+        year = years[0] if years else ""
+        item.setText(name + "\n" + " · ".join(v for v in (artist, year, count) if v))  # the tree's caption
+        item.setToolTip(item.text())
+        item.setData({"name": name, "artist": artist, "year": year, "count": count}, ALBUM_INFO_ROLE)
         item.setData(members[0], ART_ROLE)
 
     def trackItem(self, tags, path):
