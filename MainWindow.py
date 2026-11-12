@@ -1,10 +1,10 @@
 import os
 
-from PySide6.QtCore import QByteArray, QItemSelectionModel, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QByteArray, QItemSelectionModel, QModelIndex, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QActionGroup, QGuiApplication, QIcon, QKeySequence, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractSlider, QApplication, QFileDialog, QFrame, QHBoxLayout,
-                               QHeaderView, QLabel, QLineEdit, QMainWindow, QProgressBar, QPushButton, QSlider,
-                               QStackedWidget, QStyle, QTableView, QTreeView, QVBoxLayout, QWidget)
+                               QHeaderView, QLabel, QLineEdit, QListView, QMainWindow, QProgressBar, QPushButton,
+                               QSlider, QSplitter, QStackedWidget, QStyle, QTableView, QTreeView, QVBoxLayout, QWidget)
 
 import Agents
 import AudioFeatures
@@ -13,7 +13,7 @@ import Session
 import Settings
 import Theme
 from AudioAnalyzer import AudioAnalyzer
-from GroupedTracksModel import GroupedTracksModel, MODES, THUMB_SIZE
+from GroupedTracksModel import COVER_SIZE, GroupedTracksModel, MODES, THUMB_SIZE
 from LibraryScanner import LibraryScanner
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
@@ -162,8 +162,33 @@ class MainWindow(QMainWindow):
         self.tre_tracks.setIconSize(QSize(THUMB_SIZE, THUMB_SIZE))
         self.tre_tracks.setUniformRowHeights(False)
         self.tre_tracks.setAnimated(True)
-        self.stk_tracks = QStackedWidget()  # the flat table, or the grouped tree
+
+        # Album mode: the albums side by side as covers, and the tracks of the selected one below.
+        self.lst_albums = QListView()
+        self.lst_albums.setModel(self.groupedModel)
+        self.lst_albums.setViewMode(QListView.IconMode)
+        self.lst_albums.setIconSize(QSize(COVER_SIZE, COVER_SIZE))
+        self.lst_albums.setGridSize(QSize(COVER_SIZE + 30, COVER_SIZE + 70))
+        self.lst_albums.setResizeMode(QListView.Adjust)
+        self.lst_albums.setMovement(QListView.Static)
+        self.lst_albums.setWordWrap(True)
+        self.lst_albums.setUniformItemSizes(True)
+        self.lst_albums.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tre_albumTracks = QTreeView()  # same model, rooted at the selected album
+        self.tre_albumTracks.setModel(self.groupedModel)
+        self.tre_albumTracks.setHeaderHidden(True)
+        self.tre_albumTracks.setRootIsDecorated(False)
+        self.tre_albumTracks.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tre_albumTracks.hide()
+        self.spl_albums = QSplitter(Qt.Vertical)
+        self.spl_albums.addWidget(self.lst_albums)
+        self.spl_albums.addWidget(self.tre_albumTracks)
+        self.spl_albums.setStretchFactor(0, 3)
+        self.spl_albums.setStretchFactor(1, 2)
+
+        self.stk_tracks = QStackedWidget()  # the flat table, the album grid, or the grouped tree
         self.stk_tracks.addWidget(self.tbl_tracks)
+        self.stk_tracks.addWidget(self.spl_albums)
         self.stk_tracks.addWidget(self.tre_tracks)
         layout.addWidget(self.stk_tracks, 1)
 
@@ -196,6 +221,9 @@ class MainWindow(QMainWindow):
         self.inp_find.textChanged.connect(self.filterTable)
         self.tbl_tracks.activated.connect(self.playRow)
         self.tre_tracks.activated.connect(self.playRow)
+        self.tre_albumTracks.activated.connect(self.playRow)
+        self.lst_albums.activated.connect(self.playAlbum)
+        self.lst_albums.selectionModel().currentChanged.connect(lambda current, previous: self.showAlbumTracks(current))
         self.btn_find.clicked.connect(self.findTrack)
         self.btn_play.clicked.connect(self.play)
         self.btn_next.clicked.connect(self.next)
@@ -344,7 +372,8 @@ class MainWindow(QMainWindow):
         self.prg_audio.hide()
 
     def setLibraryControlsEnabled(self, enabled):
-        for w in (self.inp_find, self.btn_find, self.btn_play, self.btn_next, self.btn_random, self.sld_time, self.tbl_tracks, self.tre_tracks):
+        for w in (self.inp_find, self.btn_find, self.btn_play, self.btn_next, self.btn_random, self.sld_time, self.tbl_tracks, self.tre_tracks,
+                  self.lst_albums, self.tre_albumTracks):
             w.setEnabled(enabled)
 
     def setCommentatorEnabled(self, enabled):
@@ -387,8 +416,7 @@ class MainWindow(QMainWindow):
         self.showDisplayMode()
 
     def showDisplayMode(self):
-        grouped = self.groupLevels() is not None
-        self.stk_tracks.setCurrentWidget(self.tre_tracks if grouped else self.tbl_tracks)
+        self.stk_tracks.setCurrentWidget({"tracks": self.tbl_tracks, "album": self.spl_albums}.get(self.displayMode, self.tre_tracks))
         self.refreshGroups()
         self.revealCurrent()
 
@@ -401,8 +429,20 @@ class MainWindow(QMainWindow):
         model = self.trackModel
         paths = [p for p, searchable in zip(model.paths, model.searchText) if text in searchable]
         self.groupedModel.build(self.session.tracks, paths, levels)
-        if(text and len(paths) <= 500):
+        if(self.displayMode == "album"):
+            self.revealCurrent()
+        elif(text and len(paths) <= 500):
             self.tre_tracks.expandAll()
+
+    # The tracks of the selected album, shown under the grid.
+    def showAlbumTracks(self, album):
+        self.tre_albumTracks.setRootIndex(album)
+        self.tre_albumTracks.setVisible(album.isValid() and self.displayMode == "album")
+
+    def playAlbum(self, album):
+        first = self.groupedModel.itemFromIndex(album).child(0)
+        if(first is not None):
+            self.playRow(first.index())
 
     def updateCount(self):
         shown, total = self.trackProxy.rowCount(), self.trackModel.rowCount()
@@ -418,9 +458,23 @@ class MainWindow(QMainWindow):
     # Selects the playing track's row and scrolls to it, centered, unless it is already on screen
     # (or hidden by the current search).
     def revealCurrent(self):
+        if(self.displayMode == "album"):  # the playing track's album, else the first one
+            items = self.groupedModel.items.get(self.session.current)
+            album = items[0].parent().index() if items else self.groupedModel.index(0, 0)
+            if(album.isValid()):
+                self.lst_albums.setCurrentIndex(album)
+                self.showAlbumTracks(album)
+                self.lst_albums.scrollTo(album, QAbstractItemView.PositionAtCenter)
+                if(items):
+                    self.tre_albumTracks.setCurrentIndex(items[0].index())
+                    self.tre_albumTracks.scrollTo(items[0].index(), QAbstractItemView.PositionAtCenter)
+            else:
+                self.showAlbumTracks(QModelIndex())
+            return
         if(self.groupLevels() is not None):
-            item = self.groupedModel.items.get(self.session.current)
-            if(item is not None):
+            items = self.groupedModel.items.get(self.session.current)
+            if(items):
+                item = items[0]
                 self.tre_tracks.setCurrentIndex(item.index())  # expands the groups above it
                 self.tre_tracks.scrollTo(item.index(), QAbstractItemView.PositionAtCenter)
             return

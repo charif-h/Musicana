@@ -1,11 +1,14 @@
-from PySide6.QtCore import QSize, Qt
+import re
+
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QIcon, QPixmap, QStandardItem, QStandardItemModel
 
 import FileSystem
 from TrackTableModel import PATH_ROLE
 
 ART_ROLE = Qt.UserRole + 1  # path of the track whose artwork stands for a group (albums)
-THUMB_SIZE = 56
+THUMB_SIZE = 56  # album icon in the tree
+COVER_SIZE = 160  # album cover in the grid; also the size the artwork is scaled to once
 
 # Display modes: (id, menu label, levels from the top group down to the tracks).
 MODES = (("tracks", "All &tracks", None),
@@ -15,8 +18,32 @@ MODES = (("tracks", "All &tracks", None),
 
 UNKNOWN = {"album": "Unknown album", "artist": "Unknown artist", "genre": "Unknown genre"}
 
+# Tags that name several people or styles at once. Each name gets its own group, and the track is listed
+# under every one of them. Genres are not split on "&" ("Rhythm & Blues", "Drum & Bass").
+SEPARATORS = {
+    "artist": re.compile(r"\s*;\s*|\s+/\s+|\s+&\s+|\s+(?:feat\.?|ft\.?|featuring)\s+", re.IGNORECASE),
+    "genre": re.compile(r"\s*[;,]\s*|\s+/\s+"),
+}
+
+# Acts whose name contains a separator: kept whole instead of being read as two artists.
+SINGLE_ARTISTS = {"simon & garfunkel", "hall & oates", "crosby, stills & nash", "florence & the machine",
+                  "mumford & sons", "brooks & dunn", "sly & the family stone", "ike & tina turner"}
+
 def tagText(tags, key):
     return " / ".join(tags.get(key, []))
+
+# The group names a track belongs to for this tag: several for a collaboration or a multi-genre track.
+def groupNames(tags, key):
+    if(key not in SEPARATORS):
+        return [tagText(tags, key)]
+    names = []
+    for value in tags.get(key, []):
+        parts = [value] if(key == "artist" and value.lower() in SINGLE_ARTISTS) else SEPARATORS[key].split(value)
+        for part in parts:
+            part = part.strip()
+            if(part and part not in names):
+                names.append(part)
+    return names or [""]
 
 def trackNumber(tags):
     text = tagText(tags, "tracknumber").split("/")[0].strip()
@@ -30,7 +57,7 @@ def groupKey(name):
 class GroupedTracksModel(QStandardItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.items = {}  # track path -> its item
+        self.items = {}  # track path -> its items (several when the track is listed under more than one group)
         self.current = None
         self.thumbnails = {}  # track path -> QIcon (empty when it has no artwork)
         self.boldFont = QFont()
@@ -52,7 +79,8 @@ class GroupedTracksModel(QStandardItemModel):
         key, rest = levels[0], levels[1:]
         groups = {}
         for path in paths:
-            groups.setdefault(tagText(tracks[path], key), []).append(path)
+            for name in groupNames(tracks[path], key):
+                groups.setdefault(name, []).append(path)
         for name in sorted(groups, key=groupKey):
             members = groups[name]
             item = QStandardItem()
@@ -66,15 +94,13 @@ class GroupedTracksModel(QStandardItemModel):
             self.fill(item, tracks, members, rest)
 
     def describeAlbum(self, item, name, tracks, members):
-        first = tracks[members[0]]
-        artists = sorted({tagText(tracks[p], "artist") for p in members} - {""})
+        artists = sorted({a for p in members for a in groupNames(tracks[p], "artist")} - {""})
         artist = artists[0] if len(artists) == 1 else ("Various artists" if artists else "")
         years = sorted({tagText(tracks[p], "date")[:4] for p in members} - {""})
         count = str(len(members)) + (" track" if len(members) == 1 else " tracks")
         details = " · ".join(v for v in (artist, years[0] if years else "", count) if v)
         item.setText((name or UNKNOWN["album"]) + "\n" + details)
         item.setData(members[0], ART_ROLE)
-        item.setSizeHint(QSize(0, THUMB_SIZE + 8))
 
     def trackItem(self, tags, path):
         item = QStandardItem()
@@ -83,7 +109,7 @@ class GroupedTracksModel(QStandardItemModel):
         item.setText((str(number).zfill(2) + "  " if number else "") + (tagText(tags, "title") or path))
         item.setToolTip(path)
         item.setData(path, PATH_ROLE)
-        self.items[path] = item
+        self.items.setdefault(path, []).append(item)
         return item
 
     def thumbnail(self, path):
@@ -95,7 +121,7 @@ class GroupedTracksModel(QStandardItemModel):
             except Exception:  # unreadable or vanished file: no thumbnail
                 artwork = None
             if(artwork is not None and pixmap.loadFromData(artwork)):
-                icon = QIcon(pixmap.scaled(THUMB_SIZE, THUMB_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                icon = QIcon(pixmap.scaled(COVER_SIZE, COVER_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             self.thumbnails[path] = icon
         return self.thumbnails[path]
 
@@ -108,8 +134,7 @@ class GroupedTracksModel(QStandardItemModel):
 
     def setCurrent(self, path):
         for p, marked in ((self.current, False), (path, True)):
-            item = self.items.get(p)
-            if(item is not None):
+            for item in self.items.get(p, []):
                 text = item.text()
                 if(text.startswith("▶  ")):
                     text = text[3:]
