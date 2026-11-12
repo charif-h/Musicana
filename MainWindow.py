@@ -163,7 +163,7 @@ class MainWindow(QMainWindow):
         self.tre_tracks.setUniformRowHeights(False)
         self.tre_tracks.setAnimated(True)
 
-        # Album mode: the albums side by side as covers, and the tracks of the selected one below.
+        # Album mode: the albums side by side as covers, and the tracks of the selected one in a panel on the right.
         self.lst_albums = QListView()
         self.lst_albums.setModel(self.groupedModel)
         self.lst_albums.setViewMode(QListView.IconMode)
@@ -179,12 +179,13 @@ class MainWindow(QMainWindow):
         self.tre_albumTracks.setHeaderHidden(True)
         self.tre_albumTracks.setRootIsDecorated(False)
         self.tre_albumTracks.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tre_albumTracks.setMinimumWidth(260)
         self.tre_albumTracks.hide()
-        self.spl_albums = QSplitter(Qt.Vertical)
+        self.spl_albums = QSplitter(Qt.Horizontal)
         self.spl_albums.addWidget(self.lst_albums)
         self.spl_albums.addWidget(self.tre_albumTracks)
-        self.spl_albums.setStretchFactor(0, 3)
-        self.spl_albums.setStretchFactor(1, 2)
+        self.spl_albums.setStretchFactor(0, 4)
+        self.spl_albums.setStretchFactor(1, 1)
 
         self.stk_tracks = QStackedWidget()  # the flat table, the album grid, or the grouped tree
         self.stk_tracks.addWidget(self.tbl_tracks)
@@ -434,7 +435,7 @@ class MainWindow(QMainWindow):
         elif(text and len(paths) <= 500):
             self.tre_tracks.expandAll()
 
-    # The tracks of the selected album, shown under the grid.
+    # The tracks of the selected album, shown beside the grid.
     def showAlbumTracks(self, album):
         self.tre_albumTracks.setRootIndex(album)
         self.tre_albumTracks.setVisible(album.isValid() and self.displayMode == "album")
