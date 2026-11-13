@@ -42,6 +42,8 @@ def groupNames(tags, key):
         parts = [value] if(key == "artist" and value.lower() in SINGLE_ARTISTS) else SEPARATORS[key].split(value)
         for part in parts:
             part = part.strip()
+            if(key == "artist"):
+                part = part[:1].upper() + part[1:]  # "savatage" -> "Savatage"; the rest is left as tagged
             if(part and part not in names):
                 names.append(part)
     return names or [""]
