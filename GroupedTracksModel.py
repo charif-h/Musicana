@@ -30,6 +30,10 @@ SEPARATORS = {
 SINGLE_ARTISTS = {"simon & garfunkel", "hall & oates", "crosby, stills & nash", "florence & the machine",
                   "mumford & sons", "brooks & dunn", "sly & the family stone", "ike & tina turner"}
 
+# The first letter of each word of an artist name is capitalized ("marcel khalife" -> "Marcel Khalife"); the
+# other letters are left as tagged, so "AC/DC" and "McCartney" survive.
+WORD_START = re.compile(r"(^|\s)(\S)")
+
 def tagText(tags, key):
     return " / ".join(tags.get(key, []))
 
@@ -43,7 +47,7 @@ def groupNames(tags, key):
         for part in parts:
             part = part.strip()
             if(key == "artist"):
-                part = part[:1].upper() + part[1:]  # "savatage" -> "Savatage"; the rest is left as tagged
+                part = WORD_START.sub(lambda m: m.group(1) + m.group(2).upper(), part)
             if(part and part not in names):
                 names.append(part)
     return names or [""]
