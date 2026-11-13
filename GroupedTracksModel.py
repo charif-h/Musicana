@@ -18,54 +18,55 @@ MODES = (("tracks", "All &tracks", None),
 
 UNKNOWN = {"album": "Unknown album", "artist": "Unknown artist", "genre": "Unknown genre"}
 
-# Tags that name several people or styles at once. Each name gets its own group, and the track is listed
-# under every one of them.
-SEPARATORS = {
-    "artist": re.compile(r"\s*;\s*|\s+/\s+|\s+&\s+|\s+(?:feat\.?|ft\.?|featuring)\s+", re.IGNORECASE),
-    "genre": re.compile(r"\s*[;,]\s*|\s+/\s+|\s+&\s+"),
+# The tag reader (FileSystem.getTrackInfo) lowercases tag values and splits them on "/", ",", "&" and ";", so a
+# collaboration or a multi-genre track already arrives as several values, each of which gets its own group here
+# (the track is listed under every one of them). It does the same to names that contain those characters:
+# "R&B" arrives as "r", "b". These names are put back together from consecutive values.
+WHOLE_NAMES = {
+    "artist": ("AC/DC", "Simon & Garfunkel", "Hall & Oates", "Crosby, Stills & Nash", "Earth, Wind & Fire",
+               "Florence & the Machine", "Mumford & Sons", "Brooks & Dunn", "Sly & the Family Stone",
+               "Ike & Tina Turner", "Tyler, the Creator"),
+    "genre": ("R&B", "Rhythm & Blues", "Drum & Bass", "Rock & Roll"),
 }
 
-# Genres whose name contains "&": kept whole instead of being read as two genres ("R&B" is always written "R&B").
-PROTECTED_GENRES = re.compile(r"(?<!\w)(?:r\s*&\s*b|rhythm\s*&\s*blues|drum\s*&\s*bass|rock\s*&\s*roll)(?!\w)", re.IGNORECASE)
-RHYTHM_AND_BLUES = re.compile(r"r\s*&\s*b", re.IGNORECASE)
-HIDDEN_AMPERSAND = chr(0)
+# "feat." is not a character the tag reader splits on
+FEATURING = re.compile(r"\s+(?:feat\.?|ft\.?|featuring)\s+", re.IGNORECASE)
 
-# Acts whose name contains a separator: kept whole instead of being read as two artists.
-SINGLE_ARTISTS = {"simon & garfunkel", "hall & oates", "crosby, stills & nash", "florence & the machine",
-                  "mumford & sons", "brooks & dunn", "sly & the family stone", "ike & tina turner"}
+# The first letter of each word is capitalized ("marcel khalife" -> "Marcel Khalife"); the other letters are
+# left as tagged. Genres also start a word after "-" and "/" ("hip-hop" -> "Hip-Hop").
+WORD_START = {"artist": re.compile(r"(^|\s)(\S)"), "genre": re.compile(r"(^|[\s/-])(\S)")}
 
-# The first letter of each word of an artist name is capitalized ("marcel khalife" -> "Marcel Khalife"); the
-# other letters are left as tagged, so "AC/DC" and "McCartney" survive.
-WORD_START = re.compile(r"(^|\s)(\S)")
-GENRE_WORD_START = re.compile(r"(^|[\s/-])(\S)")  # genres also start a word after "-" and "/" ("hip-hop" -> "Hip-Hop")
+# How the tag reader stores a name: "R&B" -> ("r", "b")
+def asRead(name):
+    return tuple(part.strip() for part in re.split(r"[/,&;]", name.lower()) if part.strip())
 
-def capitalized(pattern, text):
-    return pattern.sub(lambda m: m.group(1) + m.group(2).upper(), text)
+# (values as read, name) for each whole name, the longest first so that a longer name wins over a part of it
+WHOLE = {key: sorted(((asRead(name), name) for name in names), key=lambda entry: -len(entry[0]))
+         for key, names in WHOLE_NAMES.items()}
 
-# Splits an artist or genre tag value into its names.
-def splitValue(key, value):
-    if(key == "artist"):
-        return [value] if(value.lower() in SINGLE_ARTISTS) else SEPARATORS[key].split(value)
-    hidden = PROTECTED_GENRES.sub(lambda m: m.group(0).replace("&", HIDDEN_AMPERSAND), value)
-    return [part.replace(HIDDEN_AMPERSAND, "&") for part in SEPARATORS[key].split(hidden)]
+def tidy(key, name):
+    return WORD_START[key].sub(lambda m: m.group(1) + m.group(2).upper(), name.strip())
 
 def tagText(tags, key):
     return " / ".join(tags.get(key, []))
 
 # The group names a track belongs to for this tag: several for a collaboration or a multi-genre track.
 def groupNames(tags, key):
-    if(key not in SEPARATORS):
+    if(key not in WHOLE_NAMES):
         return [tagText(tags, key)]
+    values = [v.strip() for v in tags.get(key, []) if v.strip()]
+    lowered = [v.lower() for v in values]
     names = []
-    for value in tags.get(key, []):
-        for part in splitValue(key, value):
-            part = part.strip()
-            if(key == "artist"):
-                part = capitalized(WORD_START, part)
-            elif(RHYTHM_AND_BLUES.fullmatch(part)):
-                part = "R&B"
-            else:
-                part = capitalized(GENRE_WORD_START, part)
+    i = 0
+    while(i < len(values)):
+        found = next(((seq, name) for seq, name in WHOLE[key] if tuple(lowered[i:i + len(seq)]) == seq), None)
+        if(found):
+            consumed, parts = len(found[0]), [found[1]]
+        else:
+            consumed = 1
+            parts = [tidy(key, part) for part in (FEATURING.split(values[i]) if key == "artist" else [values[i]])]
+        i += consumed
+        for part in parts:
             if(part and part not in names):
                 names.append(part)
     return names or [""]
