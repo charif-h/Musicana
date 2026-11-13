@@ -8,23 +8,27 @@ from TrackTableModel import PATH_ROLE
 
 ART_ROLE = Qt.UserRole + 1  # path of the track whose artwork stands for a group (albums)
 ALBUM_INFO_ROLE = Qt.UserRole + 2  # {"name", "artist", "year", "count"} of an album, for the grid's caption
-THUMB_SIZE = 56  # album icon in the tree
 COVER_SIZE = 160  # album cover in the grid; also the size the artwork is scaled to once
 
 # Display modes: (id, menu label, levels from the top group down to the tracks).
 MODES = (("tracks", "All &tracks", None),
          ("album", "Grouped by &album", ("album",)),
          ("artist", "Grouped by a&rtist", ("artist", "album")),
-         ("genre", "Grouped by &genre", ("genre", "artist")))
+         ("genre", "Grouped by &genre", ("genre",)))
 
 UNKNOWN = {"album": "Unknown album", "artist": "Unknown artist", "genre": "Unknown genre"}
 
 # Tags that name several people or styles at once. Each name gets its own group, and the track is listed
-# under every one of them. Genres are not split on "&" ("Rhythm & Blues", "Drum & Bass").
+# under every one of them.
 SEPARATORS = {
     "artist": re.compile(r"\s*;\s*|\s+/\s+|\s+&\s+|\s+(?:feat\.?|ft\.?|featuring)\s+", re.IGNORECASE),
-    "genre": re.compile(r"\s*[;,]\s*|\s+/\s+"),
+    "genre": re.compile(r"\s*[;,]\s*|\s+/\s+|\s+&\s+"),
 }
+
+# Genres whose name contains "&": kept whole instead of being read as two genres ("R&B" is always written "R&B").
+PROTECTED_GENRES = re.compile(r"(?<!\w)(?:r\s*&\s*b|rhythm\s*&\s*blues|drum\s*&\s*bass|rock\s*&\s*roll)(?!\w)", re.IGNORECASE)
+RHYTHM_AND_BLUES = re.compile(r"r\s*&\s*b", re.IGNORECASE)
+HIDDEN_AMPERSAND = chr(0)
 
 # Acts whose name contains a separator: kept whole instead of being read as two artists.
 SINGLE_ARTISTS = {"simon & garfunkel", "hall & oates", "crosby, stills & nash", "florence & the machine",
@@ -33,6 +37,17 @@ SINGLE_ARTISTS = {"simon & garfunkel", "hall & oates", "crosby, stills & nash", 
 # The first letter of each word of an artist name is capitalized ("marcel khalife" -> "Marcel Khalife"); the
 # other letters are left as tagged, so "AC/DC" and "McCartney" survive.
 WORD_START = re.compile(r"(^|\s)(\S)")
+GENRE_WORD_START = re.compile(r"(^|[\s/-])(\S)")  # genres also start a word after "-" and "/" ("hip-hop" -> "Hip-Hop")
+
+def capitalized(pattern, text):
+    return pattern.sub(lambda m: m.group(1) + m.group(2).upper(), text)
+
+# Splits an artist or genre tag value into its names.
+def splitValue(key, value):
+    if(key == "artist"):
+        return [value] if(value.lower() in SINGLE_ARTISTS) else SEPARATORS[key].split(value)
+    hidden = PROTECTED_GENRES.sub(lambda m: m.group(0).replace("&", HIDDEN_AMPERSAND), value)
+    return [part.replace(HIDDEN_AMPERSAND, "&") for part in SEPARATORS[key].split(hidden)]
 
 def tagText(tags, key):
     return " / ".join(tags.get(key, []))
@@ -43,14 +58,21 @@ def groupNames(tags, key):
         return [tagText(tags, key)]
     names = []
     for value in tags.get(key, []):
-        parts = [value] if(key == "artist" and value.lower() in SINGLE_ARTISTS) else SEPARATORS[key].split(value)
-        for part in parts:
+        for part in splitValue(key, value):
             part = part.strip()
             if(key == "artist"):
-                part = WORD_START.sub(lambda m: m.group(1) + m.group(2).upper(), part)
+                part = capitalized(WORD_START, part)
+            elif(RHYTHM_AND_BLUES.fullmatch(part)):
+                part = "R&B"
+            else:
+                part = capitalized(GENRE_WORD_START, part)
             if(part and part not in names):
                 names.append(part)
     return names or [""]
+
+# The artists of a track as one label, for lists that mix artists.
+def artistLabel(tags):
+    return ", ".join(n for n in groupNames(tags, "artist") if n) or UNKNOWN["artist"]
 
 def trackNumber(tags):
     text = tagText(tags, "tracknumber").split("/")[0].strip()
@@ -80,18 +102,25 @@ class GroupedTracksModel(QStandardItemModel):
         self.thumbnails = {}  # track path -> QIcon (empty when it has no artwork)
         self.boldFont = QFont()
         self.boldFont.setBold(True)
+        self.listArtists = False
 
     def build(self, tracks, paths, levels):
         self.clear()
         self.items = {}
         self.thumbnails = {}
+        self.listArtists = bool(levels) and levels[0] == "genre"  # a genre's tracks come from many artists
         self.fill(self.invisibleRootItem(), tracks, paths, levels)
         self.setCurrent(self.current)
 
     # One level of groups under `parent`; the deepest level holds the tracks. `top` is true for the first level.
     def fill(self, parent, tracks, paths, levels, top=True):
         if not(levels):
-            for path in sorted(paths, key=lambda p: (trackNumber(tracks[p]), tagText(tracks[p], "title").lower())):
+            if(self.listArtists):  # by artist, then album, then track
+                key = lambda p: (artistLabel(tracks[p]).lower(), tagText(tracks[p], "album").lower(),
+                                 trackNumber(tracks[p]), tagText(tracks[p], "title").lower())
+            else:
+                key = lambda p: (trackNumber(tracks[p]), tagText(tracks[p], "title").lower())
+            for path in sorted(paths, key=key):
                 parent.appendRow(self.trackItem(tracks[path], path))
             return
         key, rest = levels[0], levels[1:]
@@ -112,8 +141,7 @@ class GroupedTracksModel(QStandardItemModel):
             elif(key == "artist" and "album" in rest):
                 self.describeArtist(item, name, tracks, members)
             else:
-                item.setText((name or UNKNOWN[key]) + "  (" + str(len(members)) + ")")
-                item.setFont(self.boldFont)
+                self.describeGenre(item, name, members)
             parent.appendRow(item)
             self.fill(item, tracks, members, rest, top=False)
 
@@ -145,11 +173,23 @@ class GroupedTracksModel(QStandardItemModel):
         item.setData(byAlbum[newest][0], ART_ROLE)
         item.setFont(self.boldFont)
 
+    # A genre, drawn as a coloured tile with its name and track count (no artwork).
+    def describeGenre(self, item, name, members):
+        count = format(len(members), ",") + (" track" if len(members) == 1 else " tracks")
+        shown = name or UNKNOWN["genre"]
+        item.setText(shown + "\n" + count)
+        item.setToolTip(item.text())
+        item.setData({"name": shown, "artist": "", "year": "", "count": count, "unknown": name == ""}, ALBUM_INFO_ROLE)
+
     def trackItem(self, tags, path):
         item = QStandardItem()
         item.setEditable(False)
         number = trackNumber(tags)
-        item.setText((str(number).zfill(2) + "  " if number else "") + (tagText(tags, "title") or path))
+        title = tagText(tags, "title") or path
+        if(self.listArtists):
+            item.setText(artistLabel(tags) + " — " + title)
+        else:
+            item.setText((str(number).zfill(2) + "  " if number else "") + title)
         item.setToolTip(path)
         item.setData(path, PATH_ROLE)
         self.items.setdefault(path, []).append(item)

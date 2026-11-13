@@ -13,15 +13,15 @@ import Session
 import Settings
 import Theme
 from AudioAnalyzer import AudioAnalyzer
-from AlbumDelegate import AlbumDelegate, AlbumHeaderDelegate, CELL_SIZE
-from GroupedTracksModel import COVER_SIZE, GroupedTracksModel, MODES, THUMB_SIZE, topLevel
+from AlbumDelegate import AlbumDelegate, AlbumHeaderDelegate, CELL_SIZE, GENRE_CELL, GenreTileDelegate
+from GroupedTracksModel import COVER_SIZE, GroupedTracksModel, MODES, topLevel
 from LibraryScanner import LibraryScanner
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
 ART_SIZE = 200
 MUSIC_PATH_VARIABLE = "MUSICANA_MUSIC_PATH"
 MAIN_TAGS = ("title", "artist", "album", "genre", "date")
-GRID_MODES = ("album", "artist")  # display modes shown as a grid of covers with a track panel
+GRID_MODES = ("album", "artist", "genre")  # display modes shown as a grid with a track panel
 
 def formatTime(seconds):
     seconds = int(seconds)
@@ -156,23 +156,15 @@ class MainWindow(QMainWindow):
         self.tbl_tracks.setSortingEnabled(True)  # sorts once, by the restored indicator
 
         self.groupedModel = GroupedTracksModel(self)
-        self.tre_tracks = QTreeView()
-        self.tre_tracks.setModel(self.groupedModel)
-        self.tre_tracks.setHeaderHidden(True)
-        self.tre_tracks.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.tre_tracks.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.tre_tracks.setIconSize(QSize(THUMB_SIZE, THUMB_SIZE))
-        self.tre_tracks.setUniformRowHeights(False)
-        self.tre_tracks.setAnimated(True)
 
-        # Album and artist modes: the albums (or artists) side by side as covers, and the tracks of the selected one
+        # Album, artist and genre modes: the albums (artists, genres) side by side, and the tracks of the selected one
         # in a panel on the right (for an artist, grouped under a heading per album).
         self.lst_albums = QListView()
         self.lst_albums.setModel(self.groupedModel)
         self.lst_albums.setViewMode(QListView.IconMode)
         self.lst_albums.setIconSize(QSize(COVER_SIZE, COVER_SIZE))
-        self.lst_albums.setGridSize(CELL_SIZE)
-        self.lst_albums.setItemDelegate(AlbumDelegate(self.lst_albums))
+        self.albumDelegate = AlbumDelegate(self.lst_albums)
+        self.genreDelegate = GenreTileDelegate(self.lst_albums)
         self.lst_albums.setResizeMode(QListView.Adjust)
         self.lst_albums.setMovement(QListView.Static)
         self.lst_albums.setWordWrap(True)
@@ -193,10 +185,9 @@ class MainWindow(QMainWindow):
         self.spl_albums.setStretchFactor(0, 4)
         self.spl_albums.setStretchFactor(1, 1)
 
-        self.stk_tracks = QStackedWidget()  # the flat table, the album grid, or the grouped tree
+        self.stk_tracks = QStackedWidget()  # the flat table, or the grid with its track panel
         self.stk_tracks.addWidget(self.tbl_tracks)
         self.stk_tracks.addWidget(self.spl_albums)
-        self.stk_tracks.addWidget(self.tre_tracks)
         layout.addWidget(self.stk_tracks, 1)
 
         self.prg_scan = QProgressBar()
@@ -227,7 +218,6 @@ class MainWindow(QMainWindow):
         self.inp_find.returnPressed.connect(self.findTrack)
         self.inp_find.textChanged.connect(self.filterTable)
         self.tbl_tracks.activated.connect(self.playRow)
-        self.tre_tracks.activated.connect(self.playRow)
         self.tre_albumTracks.activated.connect(self.playRow)
         self.lst_albums.activated.connect(self.playAlbum)
         self.lst_albums.selectionModel().currentChanged.connect(lambda current, previous: self.showAlbumTracks(current))
@@ -379,7 +369,7 @@ class MainWindow(QMainWindow):
         self.prg_audio.hide()
 
     def setLibraryControlsEnabled(self, enabled):
-        for w in (self.inp_find, self.btn_find, self.btn_play, self.btn_next, self.btn_random, self.sld_time, self.tbl_tracks, self.tre_tracks,
+        for w in (self.inp_find, self.btn_find, self.btn_play, self.btn_next, self.btn_random, self.sld_time, self.tbl_tracks,
                   self.lst_albums, self.tre_albumTracks):
             w.setEnabled(enabled)
 
@@ -423,8 +413,10 @@ class MainWindow(QMainWindow):
         self.showDisplayMode()
 
     def showDisplayMode(self):
-        self.stk_tracks.setCurrentWidget(self.tbl_tracks if self.displayMode == "tracks" else
-                                         self.spl_albums if self.displayMode in GRID_MODES else self.tre_tracks)
+        self.stk_tracks.setCurrentWidget(self.tbl_tracks if self.displayMode == "tracks" else self.spl_albums)
+        tiles = self.displayMode == "genre"  # genres are plain coloured tiles, the others show covers
+        self.lst_albums.setGridSize(GENRE_CELL if tiles else CELL_SIZE)
+        self.lst_albums.setItemDelegate(self.genreDelegate if tiles else self.albumDelegate)
         self.refreshGroups()
         self.revealCurrent()
 
@@ -437,10 +429,7 @@ class MainWindow(QMainWindow):
         model = self.trackModel
         paths = [p for p, searchable in zip(model.paths, model.searchText) if text in searchable]
         self.groupedModel.build(self.session.tracks, paths, levels)
-        if(self.displayMode in GRID_MODES):
-            self.revealCurrent()
-        elif(text and len(paths) <= 500):
-            self.tre_tracks.expandAll()
+        self.revealCurrent()
 
     # The tracks of the selected album, or an artist's albums with their tracks, shown beside the grid.
     def showAlbumTracks(self, group):
@@ -486,13 +475,6 @@ class MainWindow(QMainWindow):
                     self.tre_albumTracks.scrollTo(item.index(), QAbstractItemView.PositionAtCenter)
             else:
                 self.showAlbumTracks(QModelIndex())
-            return
-        if(self.groupLevels() is not None):
-            items = self.groupedModel.items.get(self.session.current)
-            if(items):
-                item = items[0]
-                self.tre_tracks.setCurrentIndex(item.index())  # expands the groups above it
-                self.tre_tracks.scrollTo(item.index(), QAbstractItemView.PositionAtCenter)
             return
         row = self.trackModel.rows.get(self.session.current)
         if(row is None):
