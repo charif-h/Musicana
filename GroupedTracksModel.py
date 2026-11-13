@@ -50,6 +50,17 @@ def trackNumber(tags):
     text = tagText(tags, "tracknumber").split("/")[0].strip()
     return int(text) if text.isdigit() else 0
 
+# The group an item sits in at the first level (an album, artist or genre), or the item itself.
+def topLevel(item):
+    while(item.parent() is not None):
+        item = item.parent()
+    return item
+
+# The year of the tracks' release dates: the oldest by default, the newest with newest=True ("" if undated).
+def yearOf(tracks, members, newest=False):
+    years = {tagText(tracks[p], "date")[:4] for p in members} - {""}
+    return (max(years) if newest else min(years)) if years else ""
+
 # Sorts case-insensitively, with the group missing its tag last.
 def groupKey(name):
     return (name == "", name.lower())
@@ -71,8 +82,8 @@ class GroupedTracksModel(QStandardItemModel):
         self.fill(self.invisibleRootItem(), tracks, paths, levels)
         self.setCurrent(self.current)
 
-    # One level of groups under `parent`; the deepest level holds the tracks.
-    def fill(self, parent, tracks, paths, levels):
+    # One level of groups under `parent`; the deepest level holds the tracks. `top` is true for the first level.
+    def fill(self, parent, tracks, paths, levels, top=True):
         if not(levels):
             for path in sorted(paths, key=lambda p: (trackNumber(tracks[p]), tagText(tracks[p], "title").lower())):
                 parent.appendRow(self.trackItem(tracks[path], path))
@@ -82,29 +93,51 @@ class GroupedTracksModel(QStandardItemModel):
         for path in paths:
             for name in groupNames(tracks[path], key):
                 groups.setdefault(name, []).append(path)
-        for name in sorted(groups, key=groupKey):
+        if(key == "album" and not top):  # an artist's discography: oldest first, undated last
+            order = sorted(groups, key=lambda n: (yearOf(tracks, groups[n]) == "", yearOf(tracks, groups[n]), n.lower()))
+        else:
+            order = sorted(groups, key=groupKey)
+        for name in order:
             members = groups[name]
             item = QStandardItem()
             item.setEditable(False)
             if(key == "album"):
-                self.describeAlbum(item, name, tracks, members)
+                self.describeAlbum(item, name, tracks, members, withArtist=top)
+            elif(key == "artist" and "album" in rest):
+                self.describeArtist(item, name, tracks, members)
             else:
                 item.setText((name or UNKNOWN[key]) + "  (" + str(len(members)) + ")")
                 item.setFont(self.boldFont)
             parent.appendRow(item)
-            self.fill(item, tracks, members, rest)
+            self.fill(item, tracks, members, rest, top=False)
 
-    def describeAlbum(self, item, name, tracks, members):
+    def describeAlbum(self, item, name, tracks, members, withArtist=True):
         artists = sorted({a for p in members for a in groupNames(tracks[p], "artist")} - {""})
         artist = artists[0] if len(artists) == 1 else ("Various artists" if artists else "")
         years = sorted({tagText(tracks[p], "date")[:4] for p in members} - {""})
         count = str(len(members)) + (" track" if len(members) == 1 else " tracks")
         name = name or UNKNOWN["album"]
         year = years[0] if years else ""
-        item.setText(name + "\n" + " · ".join(v for v in (artist, year, count) if v))  # the tree's caption
+        item.setText(name + "\n" + " · ".join(v for v in ((artist if withArtist else ""), year, count) if v))
         item.setToolTip(item.text())
         item.setData({"name": name, "artist": artist, "year": year, "count": count}, ALBUM_INFO_ROLE)
         item.setData(members[0], ART_ROLE)
+
+    # An artist, shown with the cover of the newest of their albums.
+    def describeArtist(self, item, name, tracks, members):
+        byAlbum = {}
+        for p in members:
+            for album in groupNames(tracks[p], "album"):
+                byAlbum.setdefault(album, []).append(p)
+        newest = max(sorted(byAlbum, key=groupKey), key=lambda a: (yearOf(tracks, byAlbum[a], newest=True), a != ""))
+        name = name or UNKNOWN["artist"]
+        count = str(len(byAlbum)) + (" album" if len(byAlbum) == 1 else " albums")
+        count += " · " + str(len(members)) + (" track" if len(members) == 1 else " tracks")
+        item.setText(name + "\n" + count)
+        item.setToolTip(item.text())
+        item.setData({"name": name, "artist": "", "year": "", "count": count}, ALBUM_INFO_ROLE)
+        item.setData(byAlbum[newest][0], ART_ROLE)
+        item.setFont(self.boldFont)
 
     def trackItem(self, tags, path):
         item = QStandardItem()

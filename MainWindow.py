@@ -13,14 +13,15 @@ import Session
 import Settings
 import Theme
 from AudioAnalyzer import AudioAnalyzer
-from AlbumDelegate import AlbumDelegate, CELL_SIZE
-from GroupedTracksModel import COVER_SIZE, GroupedTracksModel, MODES, THUMB_SIZE
+from AlbumDelegate import AlbumDelegate, AlbumHeaderDelegate, CELL_SIZE
+from GroupedTracksModel import COVER_SIZE, GroupedTracksModel, MODES, THUMB_SIZE, topLevel
 from LibraryScanner import LibraryScanner
 from TrackTableModel import PATH_ROLE, TrackFilterProxy, TrackTableModel
 
 ART_SIZE = 200
 MUSIC_PATH_VARIABLE = "MUSICANA_MUSIC_PATH"
 MAIN_TAGS = ("title", "artist", "album", "genre", "date")
+GRID_MODES = ("album", "artist")  # display modes shown as a grid of covers with a track panel
 
 def formatTime(seconds):
     seconds = int(seconds)
@@ -164,7 +165,8 @@ class MainWindow(QMainWindow):
         self.tre_tracks.setUniformRowHeights(False)
         self.tre_tracks.setAnimated(True)
 
-        # Album mode: the albums side by side as covers, and the tracks of the selected one in a panel on the right.
+        # Album and artist modes: the albums (or artists) side by side as covers, and the tracks of the selected one
+        # in a panel on the right (for an artist, grouped under a heading per album).
         self.lst_albums = QListView()
         self.lst_albums.setModel(self.groupedModel)
         self.lst_albums.setViewMode(QListView.IconMode)
@@ -180,6 +182,8 @@ class MainWindow(QMainWindow):
         self.tre_albumTracks.setModel(self.groupedModel)
         self.tre_albumTracks.setHeaderHidden(True)
         self.tre_albumTracks.setRootIsDecorated(False)
+        self.tre_albumTracks.setItemsExpandable(False)
+        self.tre_albumTracks.setItemDelegate(AlbumHeaderDelegate(self.tre_albumTracks))
         self.tre_albumTracks.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tre_albumTracks.setMinimumWidth(260)
         self.tre_albumTracks.hide()
@@ -419,7 +423,8 @@ class MainWindow(QMainWindow):
         self.showDisplayMode()
 
     def showDisplayMode(self):
-        self.stk_tracks.setCurrentWidget({"tracks": self.tbl_tracks, "album": self.spl_albums}.get(self.displayMode, self.tre_tracks))
+        self.stk_tracks.setCurrentWidget(self.tbl_tracks if self.displayMode == "tracks" else
+                                         self.spl_albums if self.displayMode in GRID_MODES else self.tre_tracks)
         self.refreshGroups()
         self.revealCurrent()
 
@@ -432,20 +437,25 @@ class MainWindow(QMainWindow):
         model = self.trackModel
         paths = [p for p, searchable in zip(model.paths, model.searchText) if text in searchable]
         self.groupedModel.build(self.session.tracks, paths, levels)
-        if(self.displayMode == "album"):
+        if(self.displayMode in GRID_MODES):
             self.revealCurrent()
         elif(text and len(paths) <= 500):
             self.tre_tracks.expandAll()
 
-    # The tracks of the selected album, shown beside the grid.
-    def showAlbumTracks(self, album):
-        self.tre_albumTracks.setRootIndex(album)
-        self.tre_albumTracks.setVisible(album.isValid() and self.displayMode == "album")
+    # The tracks of the selected album, or an artist's albums with their tracks, shown beside the grid.
+    def showAlbumTracks(self, group):
+        self.tre_albumTracks.setRootIndex(group)
+        self.tre_albumTracks.setVisible(group.isValid() and self.displayMode in GRID_MODES)
+        if(group.isValid() and self.displayMode == "artist"):
+            self.tre_albumTracks.expandAll()  # every album is open under its heading
 
-    def playAlbum(self, album):
-        first = self.groupedModel.itemFromIndex(album).child(0)
-        if(first is not None):
-            self.playRow(first.index())
+    # Double-click on an album or artist: plays its first track.
+    def playAlbum(self, group):
+        item = self.groupedModel.itemFromIndex(group)
+        while(item is not None and item.data(PATH_ROLE) is None):
+            item = item.child(0)
+        if(item is not None):
+            self.playRow(item.index())
 
     def updateCount(self):
         shown, total = self.trackProxy.rowCount(), self.trackModel.rowCount()
@@ -461,16 +471,19 @@ class MainWindow(QMainWindow):
     # Selects the playing track's row and scrolls to it, centered, unless it is already on screen
     # (or hidden by the current search).
     def revealCurrent(self):
-        if(self.displayMode == "album"):  # the playing track's album, else the first one
-            items = self.groupedModel.items.get(self.session.current)
-            album = items[0].parent().index() if items else self.groupedModel.index(0, 0)
-            if(album.isValid()):
-                self.lst_albums.setCurrentIndex(album)
-                self.showAlbumTracks(album)
-                self.lst_albums.scrollTo(album, QAbstractItemView.PositionAtCenter)
-                if(items):
-                    self.tre_albumTracks.setCurrentIndex(items[0].index())
-                    self.tre_albumTracks.scrollTo(items[0].index(), QAbstractItemView.PositionAtCenter)
+        if(self.displayMode in GRID_MODES):  # the playing track's album or artist, else the first one
+            items = self.groupedModel.items.get(self.session.current, [])
+            browsed = self.lst_albums.currentIndex()
+            # a track listed under several artists stays under the one being browsed
+            item = next((i for i in items if topLevel(i).index() == browsed), items[0] if items else None)
+            group = topLevel(item).index() if item is not None else self.groupedModel.index(0, 0)
+            if(group.isValid()):
+                self.lst_albums.setCurrentIndex(group)
+                self.showAlbumTracks(group)
+                self.lst_albums.scrollTo(group, QAbstractItemView.PositionAtCenter)
+                if(item is not None):
+                    self.tre_albumTracks.setCurrentIndex(item.index())
+                    self.tre_albumTracks.scrollTo(item.index(), QAbstractItemView.PositionAtCenter)
             else:
                 self.showAlbumTracks(QModelIndex())
             return
