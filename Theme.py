@@ -18,9 +18,10 @@ QLineEdit:focus {{ border-color: {accent}; }}
 QSlider::groove:horizontal {{ height: 4px; background: {border}; border-radius: 2px; }}
 QSlider::sub-page:horizontal {{ background: {accent}; border-radius: 2px; }}
 QSlider::handle:horizontal {{ width: 14px; margin: -5px 0; border-radius: 7px; background: {accent}; }}
-QTableView {{ border: 1px solid {border}; border-radius: 6px; gridline-color: transparent;
+QTableView, QTreeView {{ border: 1px solid {border}; border-radius: 6px; gridline-color: transparent;
               selection-background-color: {accent}; selection-color: {accentText}; }}
 QTableView::item {{ padding: 0 6px; }}
+QTreeView::item {{ padding: 2px 0; }}
 QHeaderView::section {{ padding: 5px 6px; border: none; border-bottom: 1px solid {border};
                         background: {surfaceAlt}; font-weight: 600; }}
 QLabel#title {{ font-size: 20pt; font-weight: 600; }}
